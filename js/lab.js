@@ -123,8 +123,8 @@
       }
       const m = l.metrics.find((x) => x.id === c.metric) || { label: c.metric };
       if (c.scope === 'current') {
-        const v = l.run(cfg, input).stats[c.metric];
-        return { label: c.label, ok: within(v, c), text: `this ${one}: ${m.label.toLowerCase()} ${m.fmt ? m.fmt(v) : v}` };
+        const ok = within(l.run(cfg, input).stats[c.metric], c);
+        return { label: c.label, ok, text: ok ? `yes, in this ${one}` : `not in this ${one}` };
       }
       const all = runAll(l, cfg);
       const bad = all.filter((r) => !within(r.stats[c.metric], c));
@@ -151,4 +151,445 @@
   }
 
   Object.assign(lab, { configFor, runAll, predict, checkChallenge, interleavings, clone });
+
+  /* =====================================================================
+   * Page UI (DOM). Called by app.js; never at load time.
+   * env: { icon(name), progress(labId) → {p, c}, save(), related(labId, tabId) → [{href, text}],
+   *        replaceHash(hash), chapterTitle(id), onProgress() }
+   * ===================================================================== */
+  function parseQuery(qs) {
+    const out = {};
+    String(qs || '').split('&').forEach((part) => {
+      if (!part) return;
+      const i = part.indexOf('=');
+      try { out[decodeURIComponent(i < 0 ? part : part.slice(0, i))] = decodeURIComponent(i < 0 ? '' : part.slice(i + 1)); } catch (e) { /* ignore bad escapes */ }
+    });
+    return out;
+  }
+  // Only knobs the tab lets you change may come from the URL; values must match an option.
+  function overridesFrom(l, q, editable) {
+    const over = {};
+    l.knobs.forEach((k) => {
+      if (q[k.id] == null || !editable(k.id)) return;
+      const opt = k.options.find((o) => String(o.value) === q[k.id]);
+      if (opt) over[k.id] = opt.value;
+    });
+    if (l.slots && q.slots && editable('slots')) over.slots = q.slots.split('.');
+    return over;
+  }
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  function renderPage(l, tabId, query, v, env) {
+    const { h } = DDIA.viz;
+    const tabs = l.presets.map((t) => Object.assign({ kind: 'preset' }, t)).concat(l.challenges.map((t) => Object.assign({ kind: 'challenge' }, t)));
+    const tab = tabs.find((t) => t.id === tabId) || tabs[0];
+    const isCh = tab.kind === 'challenge';
+    const q = parseQuery(query);
+    const prog = env.progress(l.id);
+    const [one, many] = l.sampleNoun;
+    const editable = (id) => !isCh || (tab.knobs || []).includes(id);
+    const base = () => configFor(l, tab.config);
+    const startInput = (c) => (tab.input != null ? clone(tab.input) : l.defaultInput(c));
+    const validInput = (inp, c) => inp != null && l.parseInput(l.inputKey(inp), c) != null;
+
+    let cfg = configFor(l, tab.config, overridesFrom(l, q, editable));
+    let input = q.run != null ? l.parseInput(q.run, cfg) : null;
+    if (input == null) input = startInput(cfg);
+    let result = null;
+    let view = null;
+    let speed = 1;
+    let moreOpen = false;
+    let allOpen = false;
+    let checkRes = null;
+    const predict = !isCh && tab.predict ? tab.predict : null;
+    let asking = !!predict && prog.p[tab.id] == null && !Object.keys(q).length;
+
+    const btn = (icon, label, kind, onclick, attrs) => h('button', Object.assign({ type: 'button', class: 'vz-btn' + (kind ? ' ' + kind : ''), onclick }, attrs || {}),
+      icon ? h('span', { class: 'ic', 'aria-hidden': 'true' }, icon) : null, label);
+
+    /* ----- header + tabs ----- */
+    const page = h('div', { class: 'lab', style: { '--pc': 'var(--lab)', '--pcbg': 'var(--lab-bg)' } });
+    page.appendChild(h('div', { class: 'ch-head' },
+      h('div', { class: 'ch-badge lab-badge' }, env.icon('flask')),
+      h('div', { class: 'ch-titles' },
+        h('div', { class: 'ch-kicker' }, 'Playground · ' + l.chapters.map((c) => 'Ch ' + c).join(', ')),
+        h('h1', { class: 'ch-title' }, l.title),
+        h('div', { class: 'ch-tagline' }, l.tagline))));
+    const tabsEl = h('nav', { class: 'lab-tabs', 'aria-label': `${l.title}: presets and challenges` });
+    function paintTabs() {
+      tabsEl.textContent = '';
+      tabs.forEach((t, i) => {
+        if (t.kind === 'challenge' && tabs[i - 1].kind !== 'challenge') tabsEl.appendChild(h('span', { class: 'lab-tabs-sep' }, 'Challenges'));
+        const passed = t.kind === 'challenge' && prog.c[t.id];
+        tabsEl.appendChild(h('a', {
+          href: `#/lab/${l.id}/${t.id}`,
+          class: 'lab-tab' + (t.kind === 'challenge' ? ' ch' : '') + (t === tab ? ' current' : '') + (passed || (t.kind === 'preset' && prog.p[t.id] != null) ? ' done' : ''),
+          'aria-current': t === tab ? 'page' : null,
+        }, t.kind === 'challenge' ? '★ ' : '', t.title, passed ? h('span', { class: 'ok', 'aria-label': 'passed' }, ' ✓') : null));
+      });
+    }
+    paintTabs();
+    page.appendChild(tabsEl);
+    const card = h('article', { class: 'card lab-card' });
+    page.appendChild(card);
+
+    /* ----- intro: nudge (preset) or goal + fixed settings (challenge) ----- */
+    if (isCh) {
+      card.appendChild(h('div', { class: 'lab-goal' }, h('b', null, '★ Challenge. '), tab.goal));
+      const fixed = [];
+      l.knobs.forEach((k) => {
+        if (editable(k.id)) return;
+        const o = k.options.find((x) => x.value === cfg[k.id]);
+        fixed.push(`${k.label}: ${o ? o.label : cfg[k.id]}`);
+      });
+      if (l.slots && !editable('slots')) fixed.push(`${l.slots.label}: ` + cfg.slots.map((sv) => (l.slots.states.find((x) => x.value === sv) || { label: sv }).label).join(', '));
+      if (fixed.length) card.appendChild(h('div', { class: 'lab-fixed' }, h('span', { class: 'lbl' }, 'Fixed'), fixed.join(' · ')));
+    } else {
+      card.appendChild(h('div', { class: 'lab-nudge' }, env.icon('bulb'), h('span', null, tab.nudge)));
+    }
+
+    /* ----- predict-before-you-run ----- */
+    const predictEl = h('div', { class: 'lab-predict' });
+    const optLabels = ['Never', `In some ${many}`, `In every ${one}`];
+    const predictRes = () => DDIA.lab.predict(l, configFor(l, tab.config, predict.config), predict.metric);
+    const countText = (r) => `${r.hits} of ${r.total} ${many}`;
+    function paintPredict(reveal) {
+      predictEl.textContent = '';
+      predictEl.hidden = !predict;
+      if (!predict) return;
+      if (asking) {
+        predictEl.className = 'lab-predict asking';
+        predictEl.append(
+          h('div', { class: 'lab-predict-q' }, h('b', null, 'Predict first. '), predict.q),
+          h('div', { class: 'lab-predict-opts' }, optLabels.map((t, i) => h('button', { type: 'button', class: 'lab-opt', onclick: () => answer(i) }, t))),
+          h('button', { type: 'button', class: 'lab-textbtn', onclick: skipPredict }, 'Skip, just run it'));
+        return;
+      }
+      predictEl.className = 'lab-predict';
+      const saved = prog.p[tab.id];
+      if (reveal) {
+        const r = predictRes();
+        const ok = reveal.a === r.answer;
+        predictEl.className = 'lab-predict lab-reveal ' + (ok ? 'k-good' : 'k-bad');
+        predictEl.append(h('b', null, ok ? '✓ Right. ' : '✗ Not quite. '), `${optLabels[r.answer]}: ${countText(r)}. `,
+          predict.config ? 'The knobs are now set that way. ' : '', askAgainBtn());
+      } else if (saved && saved.a >= 0) {
+        predictEl.append(h('span', { class: 'lab-predict-mini' }, `You predicted “${optLabels[saved.a]}” ${saved.ok ? '✓' : '✗'}. Answer: ${optLabels[predictRes().answer]}, ${countText(predictRes())}.`), ' ', askAgainBtn());
+      } else {
+        predictEl.append(h('span', { class: 'lab-predict-mini' }, predict.q), ' ', askAgainBtn('Predict'));
+      }
+    }
+    const askAgainBtn = (label) => h('button', { type: 'button', class: 'lab-textbtn', onclick: () => {
+      asking = true;
+      cfg = base();
+      input = startInput(cfg);
+      paintKnobs();
+      paintPredict();
+      syncHash();
+      preview();
+    } }, label || 'Ask again');
+    function answer(i) {
+      const r = predictRes();
+      prog.p[tab.id] = { a: i, ok: i === r.answer };
+      env.save();
+      asking = false;
+      paintTabs();
+      if (env.onProgress) env.onProgress();
+      paintPredict({ a: i });
+      if (predict.config) { cfg = configFor(l, cfg, predict.config); paintKnobs(); }
+      changed();
+    }
+    function skipPredict() {
+      if (prog.p[tab.id] == null) { prog.p[tab.id] = { a: -1 }; env.save(); }
+      asking = false;
+      paintPredict();
+      changed();
+    }
+    card.appendChild(predictEl);
+
+    /* ----- stage (the lab's view) ----- */
+    const stage = h('div', { class: 'stage lab-stage' });
+    card.appendChild(stage);
+    const api = {
+      lab: l,
+      config: () => cfg,
+      input: () => input,
+      canEdit: (what) => (what === 'order' ? true : editable(what)),
+      set: (patch) => setCfg(patch),
+      setInput: (inp) => { input = inp; changed(); },
+      pace: (ms) => ms / speed,
+    };
+
+    /* ----- run bar ----- */
+    const inputEl = h('span', { class: 'lab-input' });
+    const speedSeg = h('div', { class: 'vz-seg lab-speed', role: 'group', 'aria-label': 'Speed' });
+    const paintSpeed = () => {
+      speedSeg.textContent = '';
+      [1, 3].forEach((x) => speedSeg.appendChild(h('button', { type: 'button', class: speed === x ? 'on' : '', 'aria-pressed': speed === x ? 'true' : 'false', onclick: () => { speed = x; paintSpeed(); } }, x + '×')));
+    };
+    paintSpeed();
+    card.appendChild(h('div', { class: 'lab-runbar' },
+      btn('▶', 'Replay', 'primary', () => play(true)),
+      btn('⇥', 'Skip to end', '', () => play(false)),
+      btn('⇄', l.nextLabel || 'Next run', '', () => { input = l.nextInput(cfg, input); changed({ keepCheck: true }); }),
+      btn('↺', 'Reset', 'ghost', () => { cfg = base(); input = startInput(cfg); paintKnobs(); changed(); }),
+      speedSeg, inputEl));
+
+    /* ----- readouts ----- */
+    const readouts = h('div', { class: 'lab-readouts', 'aria-live': 'polite' });
+    card.appendChild(readouts);
+    function paintReadouts(stats) {
+      readouts.textContent = '';
+      if (!stats) {
+        readouts.appendChild(h('span', { class: 'lab-verdict pending' }, asking ? 'waiting for your prediction' : 'running…'));
+        l.metrics.forEach((m) => readouts.appendChild(h('div', { class: 'lab-stat' }, h('b', null, '…'), h('span', null, m.label))));
+        return;
+      }
+      const c = l.classify(stats, cfg);
+      readouts.appendChild(h('span', { class: 'lab-verdict k-' + c.kind }, c.label));
+      l.metrics.forEach((m) => {
+        const val = stats[m.id];
+        const kind = m.plain ? '' : val > 0 ? m.kind : 'good';
+        readouts.appendChild(h('div', { class: 'lab-stat' + (kind ? ' k-' + kind : '') }, h('b', null, m.fmt ? m.fmt(val) : String(val)), h('span', null, m.label)));
+      });
+    }
+
+    /* ----- knobs (at most 3 per tab, the rest behind "More knobs") ----- */
+    const knobsEl = h('div', { class: 'lab-knobs' });
+    card.appendChild(knobsEl);
+    function knobRow(k) {
+      return h('div', { class: 'lab-knob' },
+        h('span', { class: 'lab-knob-label' }, k.label),
+        h('div', { class: 'vz-seg', role: 'group', 'aria-label': k.label }, k.options.map((o) => {
+          const on = cfg[k.id] === o.value;
+          const off = l.disabled ? l.disabled(cfg, k.id, o.value) : false;
+          return h('button', { type: 'button', class: on ? 'on' : '', 'aria-pressed': on ? 'true' : 'false', disabled: off && !on ? true : null, onclick: () => { if (!on) setCfg({ [k.id]: o.value }); } }, o.label);
+        })));
+    }
+    function paintKnobs() {
+      knobsEl.textContent = '';
+      knobsEl.hidden = false;
+      const mine = (tab.knobs || []).filter((id) => id !== 'slots');
+      mine.forEach((id) => knobsEl.appendChild(knobRow(l.knobs.find((k) => k.id === id))));
+      if (!isCh) {
+        const rest = l.knobs.filter((k) => !mine.includes(k.id));
+        if (rest.length) {
+          knobsEl.appendChild(h('button', { type: 'button', class: 'lab-textbtn lab-more', 'aria-expanded': moreOpen ? 'true' : 'false', onclick: () => { moreOpen = !moreOpen; paintKnobs(); } },
+            moreOpen ? '− Fewer knobs' : `＋ More knobs (${rest.length})`));
+          if (moreOpen) rest.forEach((k) => knobsEl.appendChild(knobRow(k)));
+        }
+      }
+      if (l.slots && editable('slots') && l.slots.hint) knobsEl.appendChild(h('div', { class: 'lab-knob-hint' }, l.slots.hint));
+      if (!knobsEl.childNodes.length) knobsEl.hidden = true;
+    }
+    paintKnobs();
+
+    /* ----- challenge check ----- */
+    const checkEl = h('div', { class: 'lab-check' });
+    function paintCheck() {
+      checkEl.textContent = '';
+      const n = l.samples(cfg).length;
+      const scopeAll = tab.criteria.some((c) => c.scope !== 'current');
+      checkEl.appendChild(h('div', { class: 'lab-check-head' },
+        btn('✓', scopeAll ? `Test my design (${n} ${many})` : 'Test my design', 'primary', runCheck),
+        prog.c[tab.id] && !checkRes ? h('span', { class: 'lab-passed' }, '★ passed before') : null));
+      const list = h('ul', { class: 'lab-criteria' });
+      tab.criteria.forEach((c, i) => {
+        const r = checkRes && checkRes.results[i];
+        list.appendChild(h('li', { class: r ? (r.ok ? 'ok' : 'no') : '' },
+          h('span', { class: 'mark', 'aria-hidden': 'true' }, r ? (r.ok ? '✓' : '✕') : '○'),
+          h('span', null, h('b', null, c.label), r && r.text ? h('span', { class: 'why' }, ' · ' + r.text) : null)));
+      });
+      checkEl.appendChild(list);
+      if (checkRes && checkRes.ok) checkEl.appendChild(h('div', { class: 'lab-reveal k-good' }, h('b', null, '★ Challenge passed. '), 'Your design holds up.'));
+      const fail = checkRes && checkRes.results.find((r) => !r.ok && r.failInput != null);
+      if (fail) checkEl.appendChild(btn('◉', `Show a failing ${one}`, 'danger', () => { input = clone(fail.failInput); changed({ keepCheck: true }); }));
+      if (tab.hint) checkEl.appendChild(h('details', { class: 'lab-hint' }, h('summary', null, 'Hint'), h('p', null, tab.hint)));
+    }
+    function runCheck() {
+      checkRes = checkChallenge(l, tab, cfg, input);
+      if (checkRes.ok && !prog.c[tab.id]) { prog.c[tab.id] = 1; env.save(); paintTabs(); if (env.onProgress) env.onProgress(); }
+      paintCheck();
+    }
+    if (isCh) { card.appendChild(checkEl); paintCheck(); }
+
+    /* ----- every run at once ----- */
+    const allEl = h('div', { class: 'lab-all' });
+    card.appendChild(allEl);
+    function paintAll() {
+      allEl.textContent = '';
+      const runs = allOpen ? runAll(l, cfg) : null;
+      allEl.appendChild(btn('▦', allOpen ? `Hide all ${many}` : `Try all ${l.samples(cfg).length} ${many}`, 'ghost', () => { allOpen = !allOpen; paintAll(); }, { 'aria-expanded': allOpen ? 'true' : 'false' }));
+      if (!runs) return;
+      const counts = new Map();
+      const cur = l.inputKey(input);
+      const grid = h('div', { class: 'lab-cells', role: 'group', 'aria-label': `All ${many}` });
+      runs.forEach((r) => {
+        const c = l.classify(r.stats, cfg);
+        const key = c.kind + '|' + c.label;
+        counts.set(key, (counts.get(key) || 0) + 1);
+        const name = `${l.inputLabel(r.input)}: ${c.label}`;
+        grid.appendChild(h('button', { type: 'button', class: `lab-cell k-${c.kind}` + (l.inputKey(r.input) === cur ? ' cur' : ''), title: name, 'aria-label': name, onclick: () => { input = clone(r.input); changed({ keepCheck: true }); } }));
+      });
+      allEl.appendChild(h('div', { class: 'lab-legend' }, [...counts].map(([key, n]) => {
+        const [kind, label] = key.split('|');
+        return h('span', { class: 'lab-legend-item' }, h('i', { class: 'k-' + kind }), `${label}: ${n}`);
+      }), h('span', { class: 'vz-muted' }, `Click a square to watch that ${one}.`)));
+      allEl.appendChild(grid);
+    }
+    paintAll();
+
+    /* ----- related cards ----- */
+    const rel = env.related(l.id, tab.id);
+    if (rel.length) page.appendChild(h('div', { class: 'lab-seen' }, h('span', { class: 'lbl' }, 'Seen in'), rel.map((r) => h('a', { href: r.href }, r.text))));
+
+    /* ----- state changes ----- */
+    function setCfg(patch) {
+      cfg = configFor(l, cfg, patch);
+      if (!validInput(input, cfg)) input = startInput(cfg);
+      paintKnobs();
+      changed();
+    }
+    function changed(o) {
+      if (!(o && o.keepCheck)) checkRes = null;
+      if (isCh) paintCheck();
+      if (allOpen) paintAll();
+      syncHash();
+      if (asking) { asking = false; paintPredict(); }
+      play(true);
+    }
+    function syncHash() {
+      const b = base();
+      const parts = [];
+      l.knobs.forEach((k) => { if (cfg[k.id] !== b[k.id]) parts.push(`${k.id}=${encodeURIComponent(cfg[k.id])}`); });
+      if (l.slots && !same(cfg.slots, b.slots)) parts.push('slots=' + cfg.slots.join('.'));
+      if (!same(input, startInput(cfg))) parts.push('run=' + encodeURIComponent(l.inputKey(input)));
+      env.replaceHash(`#/lab/${l.id}/${tab.id}` + (parts.length ? '?' + parts.join('&') : ''));
+    }
+    function showError(err) {
+      console.error(`Lab ${l.id} failed:`, err);
+      stage.textContent = '';
+      stage.appendChild(h('div', { class: 'demo-error' }, `This lab failed to run: ${err && err.message}`));
+    }
+    function compute() {
+      try { result = l.run(cfg, input); return true; } catch (err) { showError(err); return false; }
+    }
+    function play(animate) {
+      if (!view) return;
+      v.restart();
+      if (!compute()) return;
+      inputEl.textContent = l.inputLabel(input);
+      paintReadouts(null);
+      let p;
+      try { p = view.render(result, cfg, input, { animate }); } catch (err) { showError(err); return; }
+      const mine = result;
+      Promise.resolve(p).then(() => { if (mine === result) paintReadouts(mine.stats); });
+    }
+    function preview() {
+      if (!view) return;
+      v.restart();
+      if (!compute()) return;
+      inputEl.textContent = l.inputLabel(input);
+      paintReadouts(null);
+      try { view.render(result, cfg, input, { preview: true }); } catch (err) { showError(err); }
+    }
+    paintPredict();
+    // mount after insertion, like card demos, so SVG text measurement works
+    requestAnimationFrame(() => {
+      if (!v.alive) return;
+      try { view = l.view(stage, v, api); } catch (err) { showError(err); return; }
+      if (asking) preview(); else play(true);
+    });
+    return page;
+  }
+
+  function renderHub(env) {
+    const { h } = DDIA.viz;
+    const wrap = h('div', { class: 'lab-hub', style: { '--pc': 'var(--lab)', '--pcbg': 'var(--lab-bg)' } });
+    wrap.appendChild(h('section', { class: 'lab-hero' },
+      h('div', { class: 'ch-badge lab-badge' }, env.icon('flask')),
+      h('div', null,
+        h('h1', { html: 'The <em>Playground</em>' }),
+        h('p', null, 'Labs where you turn the knobs. Each opens ready to run: predict, change one thing, and watch what breaks.'))));
+    const grid = h('div', { class: 'lab-tiles' });
+    labs.forEach((l) => {
+      const prog = env.progress(l.id);
+      const done = l.challenges.filter((c) => prog.c[c.id]).length;
+      grid.appendChild(h('a', { class: 'lab-tile', href: `#/lab/${l.id}` },
+        h('h3', null, l.title),
+        h('p', null, l.tagline),
+        h('div', { class: 'chips' },
+          l.chapters.map((c) => h('span', { class: 'chip tag' }, `Ch ${c} · ${env.chapterTitle(c) || ''}`)),
+          (l.styles || []).map((s) => h('span', { class: 'chip style' }, s))),
+        h('div', { class: 'meta' }, `${l.presets.length} presets · ${done} of ${l.challenges.length} challenges passed`)));
+    });
+    wrap.appendChild(grid);
+    wrap.appendChild(h('p', { class: 'lab-hub-foot' }, 'Each lab is a small simulation. The same model draws the animation, answers your predictions and grades the challenges, so they always agree.'));
+    return wrap;
+  }
+
+  /* ---------- labkit: shared building blocks for lab views ---------- */
+  /** Timeline order editor (style B): tap a step, move it earlier or later.
+   *  A step never passes another step of its own transaction. */
+  function orderEditor(parent, o) {
+    const { h } = DDIA.viz;
+    const state = { order: [], label: () => '', editable: true };
+    let sel = null;
+    let refocus = false;
+    const strip = h('div', { class: 'lab-order-strip', role: 'group', 'aria-label': 'Order of steps' });
+    const earlier = h('button', { type: 'button', class: 'vz-btn', onclick: () => move(-1) }, h('span', { class: 'ic', 'aria-hidden': 'true' }, '◀'), 'Earlier');
+    const later = h('button', { type: 'button', class: 'vz-btn', onclick: () => move(1) }, 'Later', h('span', { class: 'ic', 'aria-hidden': 'true' }, '▶'));
+    const hint = h('span', { class: 'lab-order-hint' });
+    const el = h('div', { class: 'lab-order' },
+      h('div', { class: 'lab-order-head' }, h('span', { class: 'lab-order-title' }, 'Order of steps'), hint),
+      strip,
+      h('div', { class: 'lab-order-bar' }, earlier, later));
+    parent.appendChild(el);
+    const canMove = (d) => state.editable && sel != null && sel + d >= 0 && sel + d < state.order.length && state.order[sel + d] !== state.order[sel];
+    function move(d) {
+      if (!canMove(d)) return;
+      const next = state.order.slice();
+      [next[sel], next[sel + d]] = [next[sel + d], next[sel]];
+      state.order = next;
+      sel += d;
+      refocus = true;
+      paint();
+      o.onChange(next.slice());
+    }
+    function paint() {
+      strip.textContent = '';
+      const pos = { 1: 0, 2: 0 };
+      state.order.forEach((tx, i) => {
+        const k = pos[tx]++;
+        strip.appendChild(h('button', {
+          type: 'button',
+          class: `lab-step t${tx}` + (i === sel ? ' sel' : ''),
+          'aria-pressed': i === sel ? 'true' : 'false',
+          disabled: state.editable ? null : true,
+          onclick: () => { sel = sel === i ? null : i; paint(); },
+          onkeydown: (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); if (sel !== i) sel = i; move(-1); }
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); if (sel !== i) sel = i; move(1); }
+          },
+        }, h('b', null, 'T' + tx), h('span', null, state.label(tx, k))));
+      });
+      earlier.disabled = !canMove(-1);
+      later.disabled = !canMove(1);
+      hint.textContent = !state.editable ? 'fixed here' : sel == null ? 'tap a step, then move it' : 'a step cannot pass its own transaction';
+      if (refocus && sel != null && strip.children[sel]) { strip.children[sel].focus(); refocus = false; }
+    }
+    return {
+      el,
+      update(s) {
+        Object.assign(state, s, { order: s.order.slice() });
+        if (sel != null && sel >= state.order.length) sel = null;
+        paint();
+      },
+    };
+  }
+
+  lab.renderPage = renderPage;
+  lab.renderHub = renderHub;
+  lab.parseQuery = parseQuery;
+  DDIA.labkit = { orderEditor };
 })();

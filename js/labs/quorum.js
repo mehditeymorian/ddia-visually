@@ -191,6 +191,7 @@
     ],
     slots: {
       label: 'Replicas',
+      hint: 'Click a replica on the diagram to cycle it: healthy → lagging → recovering → down.',
       max: 5,
       states: [
         { value: 'up', label: 'Healthy', kind: 'good' },
@@ -311,8 +312,123 @@
       },
     ],
 
-    view: (el, v, api) => ({ render: () => Promise.resolve() }),
+    view,
   });
+
+  /* ---------- view: clients, clickable replicas, messages on a virtual clock ---------- */
+  const SCALE = 3.5; // real ms per virtual ms at 1× speed
+  const LOOK = {
+    up: { kind: 'neutral', sub: 'healthy' },
+    lag: { kind: 'warn', sub: 'lagging' },
+    rec: { kind: 'info', sub: 'down until 1 s' },
+    down: { kind: 'bad', sub: 'crashed' },
+  };
+  function view(el, v, api) {
+    const box = v.wrap(el);
+    const holder = v.h('div');
+    box.appendChild(holder);
+    const log = v.log(box, { title: 'Operations, newest first', max: 6 });
+    let st, reps, clients, clock;
+
+    function draw(cfg) {
+      holder.textContent = '';
+      st = v.stage(holder, { w: 560, h: 300, label: 'A writer and a reader talk to every replica' });
+      clients = {
+        W: st.node({ x: 70, y: 100, w: 56, h: 56, shape: 'person', label: 'Writer', kind: 'data' }),
+        R: st.node({ x: 70, y: 220, w: 56, h: 56, shape: 'person', label: 'Reader', kind: 'info' }),
+      };
+      const ys = cfg.n === 3 ? [72, 156, 240] : [44, 101, 158, 215, 272];
+      reps = ys.map((y, i) => st.node({ x: 440, y, w: 150, h: cfg.n === 3 ? 52 : 44, shape: 'db', label: `Replica ${i + 1}`, sub: '', badge: 'x=0' }));
+      reps.forEach((n) => {
+        st.link(clients.W, n, { arrow: false, dotted: true, thin: true });
+        st.link(clients.R, n, { arrow: false, dotted: true, thin: true });
+      });
+      st.text(70, 160, `waits for w = ${cfg.w}`, { size: 14, kind: 'text2' });
+      st.text(70, 282, `waits for r = ${cfg.r}`, { size: 14, kind: 'text2' });
+      const overlap = cfg.w + cfg.r > cfg.n;
+      st.text(250, 16, `w + r = ${cfg.w + cfg.r} ${overlap ? '>' : '≤'} n = ${cfg.n}: ${overlap ? 'quorums overlap' : 'quorums can miss'}`, { size: 14.5, kind: overlap ? 'good' : 'warn', weight: 700 });
+      clock = st.text(552, 16, 't = 0 ms', { size: 13, kind: 'muted', anchor: 'end', mono: true });
+      if (api.canEdit('slots')) {
+        const states = api.lab.slots.states.map((x) => x.value);
+        reps.forEach((n, i) => {
+          const cycle = () => {
+            const slots = api.config().slots.slice();
+            slots[i] = states[(states.indexOf(slots[i]) + 1) % states.length];
+            api.set({ slots });
+          };
+          n.g.setAttribute('role', 'button');
+          n.g.setAttribute('tabindex', '0');
+          n.g.setAttribute('data-slot', String(i));
+          n.g.addEventListener('click', cycle);
+          n.g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycle(); } });
+        });
+      }
+    }
+    function paintState(cfg, t) {
+      reps.forEach((n, i) => {
+        const s = cfg.slots[i];
+        const back = s === 'rec' && t >= BACK_AT;
+        const look = back ? { kind: 'info', sub: 'rejoined' } : LOOK[s];
+        n.set({ kind: look.kind, sub: look.sub, down: s === 'down' || (s === 'rec' && !back) });
+        if (n.g.getAttribute('role')) n.g.setAttribute('aria-label', `Replica ${i + 1}, ${look.sub}. Activate to change its state.`);
+      });
+    }
+    function packet(m) {
+      if (m.type === 'write') return m.repair ? { label: 'fix x=' + m.ver, kind: 'warn' } : { label: 'x=' + m.ver, kind: 'data' };
+      if (m.type === 'val') return { label: 'x=' + m.ver, kind: 'info' };
+      return { kind: m.type === 'ack' ? 'good' : 'info' }; // acks and read requests: small dots
+    }
+    function logOp(e, cfg) {
+      if (e.kind === 'w') {
+        if (e.ok) log.add(`write x=${e.ver} ✓ ${e.acks} acks in ${e.ms} ms`, 'good');
+        else log.add(`write x=${e.ver} failed: ${e.acks} of ${cfg.w} acks in time (not undone)`, 'warn');
+      } else if (!e.ok) log.add('read failed: too few replies in time', 'warn');
+      else if (e.stale) log.add(`read → x=${e.ver}: stale, x=${e.expected} was already saved`, 'bad');
+      else if (e.back) log.add(`read → x=${e.ver}: older than the previous read`, 'bad');
+      else if (e.ghost) log.add(`read → x=${e.ver}, from a write that failed`, 'warn');
+      else log.add(`read → x=${e.ver} in ${e.ms} ms`, 'info');
+    }
+    function render(result, cfg, input, o) {
+      v.restart();
+      draw(cfg);
+      log.clear();
+      paintState(cfg, 0);
+      if (o.preview) return Promise.resolve();
+      const trace = result.trace;
+      const end = trace.length ? trace[trace.length - 1].t : 0;
+      if (!o.animate) {
+        const vers = {};
+        trace.forEach((e) => { if (e.type === 'apply') vers[e.rep] = e.ver; });
+        reps.forEach((n, i) => n.set({ badge: 'x=' + (vers[i] || 0) }));
+        paintState(cfg, end);
+        trace.filter((e) => e.type === 'opdone').slice(-6).forEach((e) => logOp(e, cfg));
+        clock.set(`t = ${end} ms, done`);
+        return Promise.resolve();
+      }
+      return animate(trace, cfg);
+    }
+    async function animate(trace, cfg) {
+      const dropped = new Set(trace.filter((e) => e.type === 'drop' && !e.early).map((e) => e.id));
+      const node = (id) => (typeof id === 'number' ? reps[id] : clients[id]);
+      let now = 0;
+      for (const e of trace) {
+        if (e.t > now) {
+          await v.sleep(api.pace((e.t - now) * SCALE));
+          now = e.t;
+          clock.set(`t = ${now} ms`);
+        }
+        if (e.type === 'send') {
+          const opt = Object.assign(packet(e.payload), { dur: api.pace((e.arrive - e.t) * SCALE), flash: false });
+          if (dropped.has(e.id)) opt.drop = 0.85;
+          st.send(node(e.from), node(e.to), opt);
+        } else if (e.type === 'apply') reps[e.rep].set({ badge: 'x=' + e.ver });
+        else if (e.type === 'back') { paintState(cfg, e.t); log.add(`Replica ${e.rep + 1} is back, but it missed every write`, 'info'); }
+        else if (e.type === 'opdone') logOp(e, cfg);
+      }
+      clock.set(`t = ${now} ms, done`);
+    }
+    return { render };
+  }
 
   DDIA.labs.quorumModel = { model, WRITES, TIMEOUT, LAG, BACK_AT };
 })();

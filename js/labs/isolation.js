@@ -85,9 +85,9 @@
       names: { 'room12:ana': 'room 12', 'room12:ben': 'room 12', 'room7:zoe': 'room 7' },
       fmt: (v) => (v == null ? 'free' : v),
       txs: [
-        [{ do: 'count', prefix: 'room12:', as: 'c', label: 'count room 12 bookings', text: 'room 12 bookings' },
+        [{ do: 'count', prefix: 'room12:', as: 'c', label: 'count room 12 bookings', text: 'bookings' },
           { do: 'write', key: 'room12:ana', value: 'Ana', when: (v) => v.c === 0, label: 'if 0: book it' }, { do: 'end' }],
-        [{ do: 'count', prefix: 'room12:', as: 'c', label: 'count room 12 bookings', text: 'room 12 bookings' },
+        [{ do: 'count', prefix: 'room12:', as: 'c', label: 'count room 12 bookings', text: 'bookings' },
           { do: 'write', key: 'room12:ben', value: 'Ben', when: (v) => v.c === 0, label: 'if 0: book it' }, { do: 'end' }],
       ],
       order: [1, 2, 1, 2, 1, 2],
@@ -133,7 +133,8 @@
       }
       return undefined;
     }
-    const newerThanSnap = (tx, k) => (db.get(k) || []).some((v) => v.status === 'committed' && v.tx !== tx.id && v.cts > tx.snap);
+    const newerBy = (tx, k) => { const v = (db.get(k) || []).find((x) => x.status === 'committed' && x.tx !== tx.id && x.cts > tx.snap); return v ? v.tx : 0; };
+    const newerThanSnap = (tx, k) => newerBy(tx, k) !== 0;
 
     // lock checks return who blocks us, or null
     function xBlocker(tx, k) {
@@ -141,7 +142,7 @@
       if (l && l.x && l.x !== tx.id) return { by: l.x, what: name(k) };
       if (level === '2pl') {
         if (l) for (const s of l.s) if (s !== tx.id) return { by: s, what: name(k) };
-        for (const [p, set] of plocks) if (k.startsWith(p)) for (const s of set) if (s !== tx.id) return { by: s, what: 'the range it counted' };
+        for (const [p, set] of plocks) if (k.startsWith(p)) for (const s of set) if (s !== tx.id) return { by: s, what: 'the range' };
       }
       return null;
     }
@@ -154,13 +155,15 @@
       locks.forEach((l) => { if (l.x === tx.id) l.x = 0; l.s.delete(tx.id); });
       plocks.forEach((set) => set.delete(tx.id));
     }
-    function abort(tx, reason, intentional) {
+    // row text stays short (it sits in a chip); the reason goes in the database column
+    function abort(tx, tag, why, intentional) {
       const undone = [];
       db.forEach((vs, k) => vs.forEach((v) => { if (v.tx === tx.id && v.status === 'active') { v.status = 'aborted'; undone.push(name(k)); } }));
       tx.status = 'aborted';
       tx.intentional = !!intentional;
       release(tx);
-      return { kind: 'abort', text: `abort ✕ ${reason}`, note: undone.length ? 'undone: ' + [...new Set(undone)].join(', ') : '' };
+      const note = why || (undone.length ? 'undone: ' + [...new Set(undone)].join(', ') : '');
+      return { kind: 'abort', text: 'abort ✕' + (tag ? ' ' + tag : ''), note };
     }
     function writeVersion(tx, k, val) {
       const own = ownVersion(tx, k);
@@ -171,7 +174,7 @@
     function lockRows(tx, keys) {
       for (const k of keys) { const b = xBlocker(tx, k); if (b) return { blocked: b }; }
       keys.forEach((k) => { lockOf(k).x = tx.id; });
-      if (isSI && keys.some((k) => newerThanSnap(tx, k))) return { abort: abort(tx, '(row changed since my snapshot)') };
+      if (isSI && keys.some((k) => newerThanSnap(tx, k))) return { abort: abort(tx, 'conflict', 'a row I locked has changed') };
       return null;
     }
 
@@ -207,21 +210,21 @@
           if (b) return { blocked: b };
           lockOf(st.key).x = tx.id;
         }
-        if (isSI && newerThanSnap(tx, st.key)) return abort(tx, `(${name(st.key)} changed since my snapshot)`);
+        if (isSI && newerThanSnap(tx, st.key)) return abort(tx, 'conflict', `T${newerBy(tx, st.key)} already changed ${name(st.key)}`);
         let val;
         if (st.do === 'update') { val = st.fn(visible(tx, st.key)); tx.readKeys.add(st.key); }
         else val = typeof st.value === 'function' ? st.value(tx.vars) : st.value;
         writeVersion(tx, st.key, val);
-        return { kind: 'write', text: `${name(st.key)} = ${fmt(val)}`, note: `${name(st.key)}: ${fmt(val)}*` };
+        return { kind: 'write', text: `${name(st.key)} = ${fmt(val)}`, note: `${name(st.key)} = ${fmt(val)}, uncommitted` };
       }
       // end: commit, or abort on purpose
-      if (tx.id === 1 && cfg.t1end === 'abort') return abort(tx, '(T1 gives up)', true);
+      if (tx.id === 1 && cfg.t1end === 'abort') return abort(tx, '', '', true);
       // SSI: a writer whose reads went stale must abort; a read-only transaction is safe to commit
       const wrote = [...db.values()].some((vs) => vs.some((v) => v.tx === tx.id && v.status === 'active'));
       if (level === 'ssi' && wrote) {
         const stale = [...tx.readKeys].find((k) => newerThanSnap(tx, k)) ||
           [...tx.readPrefixes].find((p) => keysWith(p).some((k) => newerThanSnap(tx, k)));
-        if (stale) return abort(tx, '(what I read changed: serialization failure)');
+        if (stale) return abort(tx, 'stale read', 'something I read has changed');
       }
       clock++;
       const saved = [];
@@ -230,7 +233,7 @@
         v.status = 'committed';
         v.cts = clock;
         // only mention values that are still current (without locks, another writer may have overwritten it)
-        if (vs.filter((x) => x.status !== 'aborted').pop() === v) saved.push(`${name(k)} = ${fmt(v.val)}`);
+        if (vs.filter((x) => x.status !== 'aborted').pop() === v) saved.push(name(k));
       }));
       tx.status = 'committed';
       release(tx);
@@ -257,13 +260,13 @@
       const pref = turns.find(runnable) || (runnable(1) ? 1 : 2);
       const r = attempt(pref);
       if (!r.blocked) { consume(pref); continue; }
-      row(pref, 'wait', `wait ⏸ T${r.blocked.by} holds ${r.blocked.what}`);
+      row(pref, 'wait', 'wait ⏸', `T${r.blocked.by} has a lock on ${r.blocked.what}`);
       const other = 3 - pref;
       if (!runnable(other)) throw new Error('blocked with nobody to wait for');
       const r2 = attempt(other);
       if (r2.blocked) {
-        row(other, 'wait', `wait ⏸ T${r2.blocked.by} holds ${r2.blocked.what}`);
-        const a = abort(txs[other], '(deadlock: I was the last to wait)');
+        row(other, 'wait', 'wait ⏸', `T${r2.blocked.by} has a lock on ${r2.blocked.what}`);
+        const a = abort(txs[other], 'deadlock', 'both wait: the later waiter dies');
         row(other, 'abort', a.text, a.note);
         for (let i = turns.length - 1; i >= 0; i--) if (turns[i] === other) turns.splice(i, 1);
       } else if (txs[other].status !== 'aborted') consume(other);
@@ -286,7 +289,8 @@
     else if (aborts.length) text = `Safe: T${aborts[0]} was aborted, so the app must retry it.`;
     else if (committed.length < 2) text = `Safe: same result as running T${committed[0] || '—'} alone.`;
     else text = `Safe: same result as running T${match[0]} then T${match[1]}.`;
-    trace.push({ t: trace.length, type: 'verdict', anomaly: !match, text, final });
+    const finalText = Object.keys(final).sort().map((k) => `${name(k)} = ${fmt(final[k])}`).join(' · ');
+    trace.push({ t: trace.length, type: 'verdict', anomaly: !match, text, final, finalText });
     return {
       trace,
       stats: { anomaly: match ? 0 : 1, aborts: aborts.length, waits: trace.filter((e) => e.kind === 'wait').length, committed: committed.length },
@@ -469,8 +473,64 @@
       },
     ],
 
-    view: (el, v, api) => ({ render: () => Promise.resolve() }),
+    view,
   });
+
+  /* ---------- view: order editor + a time-flows-down table of executed steps ----------
+   * The table is HTML (not SVG) so its text stays full-size and wraps on phones. */
+  // purple = T1 and orange = T2 everywhere (order chips, headers, steps); outcomes keep their own colors
+  const KIND = { skip: 'ghost', wait: 'warn', commit: 'good', abort: 'bad' };
+  const kindOf = (e) => KIND[e.kind] || (e.tx === 1 ? 'primary' : 'data');
+  function view(el, v, api) {
+    const { h } = v;
+    const box = v.wrap(el);
+    const editor = DDIA.labkit.orderEditor(box, { onChange: (o) => api.setInput(o) });
+    const table = h('div', { class: 'iso-table', role: 'table', 'aria-label': 'Both transactions step by step, time flowing down' });
+    box.appendChild(table);
+    const cap = v.caption(box, '');
+    function head(lanes) {
+      return h('div', { class: 'iso-row iso-head', role: 'row' },
+        h('span', { role: 'columnheader', class: 'iso-t1' }, lanes[0]),
+        h('span', { role: 'columnheader', class: 'iso-t2' }, lanes[1]),
+        h('span', { role: 'columnheader' }, 'Database'));
+    }
+    function rowEl(e) {
+      const chip = h('span', { class: 'iso-chip k-' + kindOf(e) }, e.text);
+      return h('div', { class: 'iso-row', role: 'row' },
+        h('span', { role: 'cell' }, e.tx === 1 ? chip : null),
+        h('span', { role: 'cell' }, e.tx === 2 ? chip : null),
+        h('span', { role: 'cell', class: 'iso-note' + (e.kind === 'abort' ? ' k-bad' : e.kind === 'wait' ? ' k-warn' : '') }, e.note || ''));
+    }
+    function render(result, cfg, input, o) {
+      v.restart();
+      editor.update({ order: input, label: (tx, i) => api.lab.stepLabel(cfg, tx, i), editable: api.canEdit('order') });
+      const rows = result.trace.filter((e) => e.type === 'row');
+      const verdict = result.trace.find((e) => e.type === 'verdict');
+      table.textContent = '';
+      table.appendChild(head(api.lab.lanes(cfg)));
+      if (o.preview) {
+        table.appendChild(h('div', { class: 'iso-empty' }, 'Predict first, then watch the steps run in this order.'));
+        cap.set('Time flows down. Each row is one step.');
+        return Promise.resolve();
+      }
+      const finish = () => {
+        table.appendChild(h('div', { class: 'iso-final ' + (verdict.anomaly ? 'k-bad' : 'k-good') }, 'Final: ' + verdict.finalText));
+        cap.set(verdict.text, verdict.anomaly ? 'bad' : 'good');
+      };
+      if (!o.animate) { rows.forEach((e) => table.appendChild(rowEl(e))); finish(); return Promise.resolve(); }
+      cap.set('Running the steps in this order…');
+      return (async () => {
+        for (const e of rows) {
+          const r = rowEl(e);
+          r.classList.add('pop');
+          table.appendChild(r);
+          await v.sleep(api.pace(450));
+        }
+        finish();
+      })();
+    }
+    return { render };
+  }
 
   DDIA.labs.isolationEngine = { SCENARIOS, LEVELS, LEVEL_LABEL, serial };
 })();
