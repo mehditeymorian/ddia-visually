@@ -72,6 +72,8 @@
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     back: '<path d="M15 18l-6-6 6-6"/>',
     target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/>',
+    expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+    collapse: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
     list: '<path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.8" cy="6.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.8" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.8" cy="17.5" r="1.1" fill="currentColor" stroke="none"/>',
   };
   const GLYPH = {
@@ -630,7 +632,10 @@
       } else {
         s('rect', { x: -w / 2, y: -hh / 2, width: w, height: hh, rx: this.o.rx != null ? this.o.rx : 10, class: 'vz-shape' }, g);
       }
-      const dy = shape === 'db' ? 4 : 0;
+      // a cylinder's label sits in its body, below the top rim (ry), not across it
+      const ry = Math.min(9, hh * 0.16);
+      const labelY = -hh / 2 + 2 * ry + 8;              // just below the top rim
+      const subY = Math.max(hh / 2 - 8, labelY + 13);   // just above the bottom arc
       if (shape === 'person') {
         if (label) {
           const t = s('text', { x: 0, y: Math.min(w, hh) / 2 + 14, class: 'vz-label vz-ink' }, g);
@@ -638,12 +643,12 @@
         }
       } else {
         if (label !== '' && label != null) {
-          const t = s('text', { x: 0, y: (sub ? -8 : 1) + dy, class: 'vz-label vz-ink' }, g);
+          const t = s('text', { x: 0, y: shape === 'db' ? (sub ? labelY : ry + 1) : sub ? -8 : 1, class: 'vz-label vz-ink' }, g);
           t.textContent = (icon ? icon + ' ' : '') + label;
           if (this.o.size) t.style.fontSize = this.o.size + 'px';
         }
         if (sub) {
-          const t2 = s('text', { x: 0, y: 12 + dy, class: 'vz-sub vz-ink' }, g);
+          const t2 = s('text', { x: 0, y: shape === 'db' ? subY : 12, class: 'vz-sub vz-ink' }, g);
           t2.textContent = sub;
         }
       }
@@ -752,5 +757,44 @@
     }
   }
 
-  DDIA.viz = { scope, h, s, icon, speed: 1, Stage, VNode, VLink };
+  /* ---------- expand: a diagram frame over the whole screen ---------- */
+  // Diagrams are drawn 560 units wide, so a phone in portrait shrinks their text a lot.
+  // Expanding gives the frame the whole screen; turned sideways, the text roughly doubles.
+  let expanded = null;
+  function expander(frame) {
+    const label = h('span', null, 'Expand');
+    const btn = h('button', { type: 'button', class: 'frame-btn expand', 'aria-expanded': 'false', title: 'Show this diagram full screen' }, icon('expand'), label);
+    const hint = h('p', { class: 'turn-hint' }, 'Turn your phone sideways for a bigger view.');
+    let open = false;
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); set(false); } };
+    function set(o) {
+      if (open === o) return;
+      open = o;
+      frame.classList.toggle('expanded', o);
+      document.body.classList.toggle('frame-open', o);
+      btn.setAttribute('aria-expanded', o ? 'true' : 'false');
+      btn.title = o ? 'Back to the page' : 'Show this diagram full screen';
+      label.textContent = o ? 'Close' : 'Expand';
+      btn.replaceChild(icon(o ? 'collapse' : 'expand'), btn.firstChild);
+      if (o) {
+        const bar = frame.firstElementChild;
+        if (bar && bar.nextSibling !== hint) frame.insertBefore(hint, bar.nextSibling);
+        document.addEventListener('keydown', onKey);
+        expanded = api;
+        frame.scrollTop = 0;
+      } else {
+        hint.remove();
+        document.removeEventListener('keydown', onKey);
+        if (expanded === api) expanded = null;
+      }
+      btn.focus({ preventScroll: true });
+    }
+    btn.addEventListener('click', () => set(!open));
+    const api = { btn, close: () => set(false) };
+    return api;
+  }
+  /** Close whatever frame is expanded (the router calls this on every route change). */
+  const closeExpanded = () => { if (expanded) expanded.close(); };
+
+  DDIA.viz = { scope, h, s, icon, expander, closeExpanded, speed: 1, Stage, VNode, VLink };
 })();

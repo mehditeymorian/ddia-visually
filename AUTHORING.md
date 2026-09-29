@@ -21,7 +21,7 @@ DDIA.chapter({
   id: 5,                       // chapter number
   part: 2,                     // 1 = foundations (ch1–4), 2 = distributed (ch5–9), 3 = derived (ch10–11)
   title: 'Replication',        // chapter title (short)
-  short: 'Replication',        // ≤ 18 chars, used as the label on the home map
+  short: 'Replication',        // ≤ 18 chars, used as the chapter label in search results
   tagline: 'Same data, many machines',  // ≤ 8 words
   cards: [ /* 8–12 cards; every book section gets at least one */ ],
   cheatsheet: [ { term: 'Leader', text: 'Takes all writes, streams them to followers.', kind: 'primary' } /* 8–14 items */ ],
