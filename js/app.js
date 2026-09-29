@@ -969,14 +969,38 @@
       for (const l of DDIA.labs) {
         where = `lab/${l.id}`;
         if (l.problems && l.problems.length) push('breaks the bounding rules: ' + l.problems.join('; '));
+        location.hash = `#/lab/${l.id}`;
+        await wait(500);
+        const ov = main.querySelector('.lab-overview');
+        if (!ov) push('the lab overview did not render');
+        else {
+          const cards = ov.querySelectorAll('.lab-scn');
+          if (cards.length !== l.presets.length + l.challenges.length) push(`the overview shows ${cards.length} cards, expected ${l.presets.length + l.challenges.length}`);
+          if (ov.querySelectorAll('.lab-sketch svg').length !== cards.length) push('a scenario card has no sketch');
+          checkOverflow(ov);
+        }
         for (const t of l.presets.concat(l.challenges)) {
           where = `lab/${l.id}/${t.id}`;
           location.hash = `#/lab/${l.id}/${t.id}`;
           await wait(700);
           const page = main.querySelector('.lab');
           if (!page) { push('lab page did not render'); continue; }
+          const cur = page.querySelectorAll('.lab-strip [aria-current="page"]');
+          if (cur.length !== 1 || !cur[0].textContent.includes(t.title)) push('the strip does not mark the current card');
+          const toggle = page.querySelector('.lab-all-toggle');
+          if (!toggle) push('no "All scenarios" button');
+          else {
+            toggle.click();
+            await wait(150);
+            if (!page.querySelector('.lab-strip-more .lab-scn')) push('"All scenarios" did not open the grid');
+            toggle.click();
+            await wait(100);
+            if (!page.querySelector('.lab-strip-more').hidden) push('"All scenarios" did not close the grid');
+          }
           const opt = page.querySelector('.lab-predict-opts button');
           if (opt) {
+            const nudge = page.querySelector('.lab-nudge');
+            if (nudge && nudge.getClientRects().length) push('the nudge shows before the prediction');
             // nothing may reveal the outcome while the prediction is open
             if ([...page.querySelectorAll('.lab-runbar .vz-btn')].some((b) => /Run|Skip|Next|Random/.test(b.textContent) && !b.disabled)) push('a control can reveal the outcome before the prediction');
             if (page.querySelector('.lab-cell')) push('the all-runs grid shows before the prediction');
@@ -1011,6 +1035,21 @@
           const sol = DDIA.lab.configFor(l, ch.config, ch.solution.config);
           const inp = ch.solution.input != null ? ch.solution.input : ch.input != null ? ch.input : l.defaultInput(sol);
           if (!DDIA.lab.checkChallenge(l, ch, sol, inp).ok) push('the challenge solution does not pass');
+          const pr = labProgress(l.id);
+          if (pr.c[ch.id]) continue; // the control walk already passed it, so there's nothing to reveal
+          location.hash = `#/lab/${l.id}/${ch.id}`;
+          await wait(700);
+          const test = () => { const b = [...main.querySelectorAll('.lab-test .vz-btn')].find((x) => /Test my design/.test(x.textContent)); if (b) b.click(); };
+          test(); await wait(200); test(); await wait(200);
+          const show = [...main.querySelectorAll('.lab-test .lab-textbtn')].find((b) => /Show a solution/.test(b.textContent));
+          if (!show) { push('"Show a solution" did not appear after two failed tests'); continue; }
+          show.click();
+          await wait(600);
+          test();
+          await wait(300);
+          if (!main.querySelector('.lab-check .lab-reveal.k-good')) push('the shown solution does not pass in the page');
+          if (!pr.s[ch.id] || pr.c[ch.id]) push('a shown solution should count as "Solution seen", not passed');
+          if (!main.querySelector('.lab-strip [aria-current="page"] .mk.s-seen')) push('the strip does not mark the solution as seen');
         }
       }
       where = 'card links';
