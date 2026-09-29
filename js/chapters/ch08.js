@@ -416,7 +416,7 @@
       /* 4 ─────────────────────────────────────────────── */
       {
         title: 'Timeout too short or too long?',
-        lab: { id: 'leases', preset: 'crash' },
+        lab: { id: 'consensus', preset: 'flapping' },
         caption: 'Short timeouts wrongly declare slow nodes dead. Long ones leave users waiting on dead nodes. Adaptive detectors learn the delay distribution.',
         problem: 'Unbounded delays',
         fix: 'Adaptive timeouts (φ accrual)',

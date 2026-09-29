@@ -618,6 +618,29 @@ test('streams: corrections make every count right in the end, whatever the delay
   })));
 });
 
+test('streams: every event is counted, dropped or corrected, never lost from the tally', () => {
+  ['none', 'some', 'offline'].forEach((delays) => [['processing', 0, 'drop'], ['event', 0, 'drop'], ['event', 30, 'drop'], ['event', 120, 'correct']].forEach(([time, wait, late]) => {
+    const cfg = DDIA.lab.configFor(SM(), { delays, time, wait, late });
+    SM().samples(cfg).forEach((seed) => {
+      const { trace, stats } = SM().run(cfg, seed);
+      const done = trace[trace.length - 1];
+      assert.equal(done.shown.reduce((a, b) => a + b, 0) + stats.dropped, DDIA.labs.streamsModel.EVENTS, `${delays}, ${time}, seed ${seed}`);
+      assert.ok(trace.every((e) => e.type !== 'event' || e.arrives <= 540), 'every arrival fits the 9-minute timeline');
+    });
+  }));
+});
+
+test('streams: an event arriving exactly as its window closes is late', () => {
+  const cfg = DDIA.lab.configFor(SM(), { delays: 'none', time: 'event', wait: 0, late: 'drop' });
+  let seen = 0;
+  SM().samples(cfg).forEach((seed) => SM().run(cfg, seed).trace.forEach((e) => {
+    if (e.type !== 'event') return;
+    const end = (Math.floor(e.at / 60) + 1) * 60;
+    if (e.arrives >= end) { seen++; assert.equal(e.fate, 'dropped', `seed ${seed}: arrived ${e.arrives}, window ended ${end}`); }
+  }));
+  assert.ok(seen > 0);
+});
+
 test('streams: every event is counted once, in the minute it happened', () => {
   smRuns({ delays: 'offline', time: 'event', wait: 0, late: 'correct' }).forEach((r) => {
     const done = SM().run(DDIA.lab.configFor(SM(), { delays: 'offline', time: 'event', wait: 0, late: 'correct' }), r.input).trace.pop();
@@ -641,6 +664,27 @@ test('consensus: without a majority rule a partition loses acknowledged writes',
     assert.equal(csCount({ fault: 'partition', rule: 'naive', timeout }, 'lost'), 100, `${timeout} s`);
     assert.equal(csCount({ fault: 'partition', rule: 'majority', timeout }, 'lost'), 0, `${timeout} s`);
   });
+});
+
+test('consensus: without a quorum, every write client 1 makes while cut off is thrown away', () => {
+  const { FAULT_AT, HEAL_AT } = DDIA.labs.consensusModel;
+  [1, 3, 5].forEach((timeout) => {
+    const cfg = DDIA.lab.configFor(CS(), { fault: 'partition', rule: 'naive', timeout });
+    CS().samples(cfg).forEach((seed) => {
+      const cutOff = CS().run(cfg, seed).trace.filter((e) => e.type === 'write' && e.c === 0 && e.ok && e.t >= FAULT_AT && e.t < HEAL_AT);
+      assert.ok(cutOff.length > 0 && cutOff.every((e) => e.lost), `${timeout} s, seed ${seed}: all ${cutOff.length} are lost`);
+    });
+  });
+});
+
+test('consensus: never two leaders of one term', () => {
+  ['crash', 'partition', 'slow', 'slow-crash'].forEach((fault) => ['naive', 'majority'].forEach((rule) => [1, 3, 5].forEach((timeout) => {
+    const cfg = DDIA.lab.configFor(CS(), { fault, rule, timeout });
+    CS().samples(cfg).slice(0, 30).forEach((seed) => {
+      const terms = CS().run(cfg, seed).trace.filter((e) => e.type === 'elected').map((e) => e.term);
+      assert.equal(new Set(terms).size, terms.length, `${fault}, ${rule}, ${timeout} s, seed ${seed}`);
+    });
+  })));
 });
 
 test('consensus: the majority rule never loses a write, whatever goes wrong', () => {
@@ -780,6 +824,15 @@ test('predictions ask about the setup on screen', () => {
   assert.deepEqual(ask('storage', 'overwrites'), [2, 100, 100]);
   assert.deepEqual(ask('storage', 'crash-lsm'), [1, 86, 100]);
   assert.deepEqual(ask('storage', 'crash-btree'), [1, 16, 100]);
+  assert.deepEqual(ask('consensus', 'crash'), [2, 100, 100]);
+  assert.deepEqual(ask('consensus', 'split-brain'), [2, 100, 100]);
+  assert.deepEqual(ask('consensus', 'majority'), [0, 0, 100]);
+  assert.deepEqual(ask('consensus', 'flapping'), [1, 94, 100]);
+  assert.deepEqual(ask('streams', 'arrival'), [2, 100, 100]);
+  assert.deepEqual(ask('streams', 'no-wait'), [2, 100, 100]);
+  assert.deepEqual(ask('streams', 'watermark'), [0, 0, 100]);
+  assert.deepEqual(ask('streams', 'offline'), [2, 100, 100]);
+  assert.deepEqual(ask('streams', 'corrections'), [0, 0, 100]);
 });
 
 test('validation asks for sketches, blurbs and solution reasons, and rejects predict.config', () => {

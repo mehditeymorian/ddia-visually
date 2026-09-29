@@ -1,7 +1,8 @@
 /* DDIA Visual Guide — Stream windows lab (chapter 11).
  * A stream of page views is counted per minute. Most events arrive within a couple of seconds; some
  * straggle in much later. Windowing by arrival time puts stragglers in the wrong minute; windowing by
- * event time needs to decide how long to wait for them (a watermark), and what to do with events that
+ * event time needs to decide how long to wait for them (a timer on the arrival clock, the simplest kind of
+ * watermark), and what to do with events that
  * miss even that: drop them, or publish a correction. The model is pure; the view replays it. */
 (function () {
   'use strict';
@@ -43,13 +44,15 @@
       // a window counts whatever arrives during its minute of arrival time, then publishes at the minute's end
       events.forEach((e) => {
         const m = Math.floor(e.arrives / 60);
-        const into = m < MINUTES ? m : null; // arrived after the last window closed: counted nowhere
+        const into = m < MINUTES ? m : null; // arrived after the last window closed: counted nowhere, so dropped
         if (into != null) shown[into]++;
+        else dropped++;
         trace.push({ type: 'event', i: e.i, at: e.at, arrives: e.arrives, into, fate: into == null ? 'missed' : into === Math.floor(e.at / 60) ? 'ok' : 'moved' });
       });
       for (let m = 0; m < MINUTES; m++) { emitted[m] = (m + 1) * 60; trace.push({ type: 'emit', t: emitted[m], m, count: shown[m], truth: truth[m] }); }
     } else {
       // a window counts events by their own timestamp and publishes once it has waited `wait` seconds past its end
+      // minutes are half-open, [60m, 60m + 60): an event arriving exactly as its window closes is already late
       const closes = (m) => (m + 1) * 60 + cfg.wait;
       const open = Array(MINUTES).fill(true);
       const flush = (upTo) => {
@@ -145,7 +148,7 @@
     sampleNoun: ['run', 'runs'],
 
     metrics: [
-      { id: 'wrong', label: 'A minute’s count is wrong', kind: 'bad', fmt: yn },
+      { id: 'wrong', label: 'A minute’s final count is wrong', kind: 'bad', fmt: yn },
       { id: 'dropped', label: 'Late events dropped', kind: 'warn' },
       { id: 'corrections', label: 'Corrections published', kind: 'neutral', plain: true },
       { id: 'wait', label: 'Wait before a count', kind: 'neutral', plain: true, fmt: (v) => (v === 120 ? '2 min' : `${v} s`) },
@@ -160,8 +163,8 @@
       {
         id: 'arrival', title: 'Count by arrival time',
         blurb: 'Windows use the time events arrive. Are counts right?',
-        config: { delays: 'some', time: 'processing' }, knobs: ['time', 'delays'],
-        nudge: 'Switch to event time: count each event in the minute it happened.',
+        config: { delays: 'some', time: 'processing' }, knobs: ['time', 'wait'],
+        nudge: 'Switch to event time, then let each window wait for stragglers.',
         predict: { q: 'Some events straggle in up to 90 s late. Counting by arrival, will a minute’s count be wrong?', metric: 'wrong' },
       },
       {
@@ -300,8 +303,10 @@
       const what = e.correction ? 'corrected to' : 'publishes';
       log.add(`Minute ${e.m + 1} ${what} ${e.count}${ok ? ', which is right' : `, but ${e.truth} events happened in it`}`, ok ? 'good' : 'bad');
     }
-    function finish(e) {
+    function finish(e, summary) {
       clock.set(e.wrong ? 'some counts are wrong' : 'every count is right', e.wrong ? 'bad' : 'good');
+      // without the replay, say what each minute finally published next to what really happened in it
+      if (summary) e.shown.forEach((c, m) => log.add(`Minute ${m + 1}: ${c} counted, ${e.truth[m]} happened`, c === e.truth[m] ? 'good' : 'bad'));
     }
 
     function render(result, cfg, input, o) {
@@ -314,7 +319,7 @@
         trace.forEach((e) => {
           if (e.type === 'event') { plot(e); if (e.fate !== 'ok') logEvent(e); }
           else if (e.type === 'emit') emit(e);
-          else if (e.type === 'done') finish(e);
+          else if (e.type === 'done') finish(e, true);
         });
         cursor.set({ x1: X(END), x2: X(END) });
         return Promise.resolve();

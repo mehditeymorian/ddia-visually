@@ -22,7 +22,7 @@
     const slow = cfg.fault === 'slow' || cfg.fault === 'slow-crash';
     const crashes = cfg.fault === 'crash' || cfg.fault === 'slow-crash';
     const cut = cfg.fault === 'partition';
-    const nodes = Array.from({ length: N }, (_, k) => ({ k, alive: true, term: 1, leader: k === 0, heard: 0, patience: cfg.timeout + uni(0, 0.4) }));
+    const nodes = Array.from({ length: N }, (_, k) => ({ k, alive: true, term: 1, leader: k === 0, since: 0, heard: 0, patience: cfg.timeout + uni(0, 0.4) }));
     const trace = [{ type: 'start', t: 0, leader: 0, term: 1 }];
     const linked = (a, b, t) => nodes[a].alive && nodes[b].alive && (!cut || t < FAULT_AT || t >= HEAL_AT || SIDE[a] === SIDE[b]);
     let inflight = [];
@@ -43,6 +43,7 @@
         const n = nodes[m.to];
         if (!linked(m.from, m.to, t) || m.term < n.term) return false;
         if (n.leader && m.term > n.term) { n.leader = false; trace.push({ type: 'stepdown', t, k: n.k, term: n.term, newer: m.term }); }
+        else if (m.term > n.term) trace.push({ type: 'term', t, k: n.k, term: m.term }); // a follower learns a newer term
         n.term = m.term;
         if (!n.leader) n.heard = t;
         return false;
@@ -68,12 +69,15 @@
         n.patience = cfg.timeout + uni(0, 0.4);
         const reach = nodes.filter((o) => linked(n.k, o.k, t));
         const votes = reach.length; // itself plus every node it can reach
-        // was a leader still alive and reachable? then this election only happened because heartbeats were slow
-        const healthy = nodes.some((o) => o.leader && linked(n.k, o.k, t));
+        // a leader that has been in office a while and is still reachable: this election only happened because its
+        // heartbeats were slow (a leader elected moments ago may simply not have reached everyone yet)
+        const healthy = nodes.some((o) => o.leader && o.since <= t - 1 && linked(n.k, o.k, t));
         if (cfg.rule === 'majority' && votes < MAJ) { trace.push({ type: 'noquorum', t, k: n.k, votes }); return; }
+        // terms are numbered cluster-wide so they never collide: the story here is about quorums, not term clashes
         const term = Math.max(...nodes.map((o) => o.term)) + 1;
         n.term = term;
         n.leader = true;
+        n.since = t;
         if (healthy) flaps++;
         leaders.push({ k: n.k, term, from: t });
         trace.push({ type: 'elected', t, k: n.k, term, votes, healthy });
@@ -81,6 +85,7 @@
         if (cfg.rule === 'majority') reach.forEach((o) => {
           if (o === n) return;
           if (o.leader) { o.leader = false; trace.push({ type: 'stepdown', t, k: o.k, term: o.term, newer: term }); }
+          else if (o.term < term) trace.push({ type: 'term', t, k: o.k, term });
           o.term = term;
           o.heard = t;
         });
@@ -90,7 +95,8 @@
       if (step % 10 === 0 && t > 0) {
         [0, 1].forEach((c) => {
           const home = HOME[c];
-          // a client reaches any live leader, except across the partition while it lasts
+          // a client reaches any live leader, except across the partition while it lasts, and prefers the newest
+          // term it can see (so racing leaders alone never lose a write here)
           const ld = nodes.filter((o) => o.leader && o.alive && (!cut || t < FAULT_AT || t >= HEAL_AT || SIDE[o.k] === SIDE[home]))
             .sort((a, b) => b.term - a.term)[0];
           if (!ld) { writes.push({ c, t, ok: false, why: 'no leader' }); trace.push({ type: 'write', t, c, ok: false, why: 'no leader' }); return; }
@@ -100,18 +106,20 @@
             trace.push({ type: 'write', t, c, k: ld.k, term: ld.term, ok: false, why: 'no majority' });
             return;
           }
-          writes.push({ c, t, ok: true, k: ld.k, term: ld.term });
+          // the write reaches every node the leader can reach right now; only those nodes have it
+          writes.push({ c, t, ok: true, k: ld.k, term: ld.term, got: nodes.filter((o) => linked(ld.k, o.k, t)).map((o) => o.k) });
           trace.push({ type: 'write', t, c, k: ld.k, term: ld.term, ok: true });
         });
       }
     }
 
-    // an acknowledged write is lost if a newer term already had a leader when it was acknowledged:
-    // the newer leader never got it, and the old leader's log is overwritten when it steps down
+    // an acknowledged write is lost if a leader of a newer term never had it: that leader's log wins, and the
+    // write is overwritten on every node that had it. (A majority leader always had it: its voters overlap
+    // the write's majority, and in this model reachable nodes hold every write.)
     let lost = 0;
     writes.forEach((w) => {
       if (!w.ok) return;
-      if (leaders.some((l) => l.term > w.term && l.from <= w.t)) { w.lost = true; lost++; }
+      if (leaders.some((l) => l.term > w.term && !w.got.includes(l.k))) { w.lost = true; lost++; }
     });
     trace.forEach((e) => { if (e.type === 'write' && e.ok) e.lost = writes.find((w) => w.c === e.c && w.t === e.t).lost || false; });
     // the longest stretch each client went without an acknowledged write that survived
@@ -129,7 +137,7 @@
   /* ---------- the lab ---------- */
   const SEEDS = Array.from({ length: 100 }, (_, i) => i + 1);
   const FAULT_LABEL = { none: 'None', crash: 'Leader crashes', partition: 'Partition', slow: 'Slow network', 'slow-crash': 'Slow network, then a crash' };
-  const RULE_LABEL = { naive: 'First to time out', majority: 'Majority vote' };
+  const RULE_LABEL = { naive: 'None', majority: 'Majority' };
   const TIMEOUTS = [1, 3, 5];
 
   DDIA.lab({
@@ -153,12 +161,12 @@
       if (cfg.fault === 'partition') s += '<path d="M95 4V64" stroke="var(--k-bad-s)" stroke-width="2" stroke-dasharray="5 4"/>';
       if (cfg.fault === 'crash' || cfg.fault === 'slow-crash') s += '<path d="M33 13l14 14M47 13l-14 14" stroke="var(--k-bad-s)" stroke-width="2.4" stroke-linecap="round"/>';
       if (cfg.fault === 'slow' || cfg.fault === 'slow-crash') s += '<path d="M56 34 q10 -12 20 0 t20 0 t20 0 t20 0" stroke="var(--k-warn-s)" stroke-width="2" fill="none"/>';
-      const label = `${cfg.rule === 'majority' ? 'majority vote' : 'first to time out'}, ${cfg.timeout} s`;
+      const label = `${cfg.rule === 'majority' ? 'majority quorum' : 'no quorum'}, ${cfg.timeout} s timeout`;
       return `<svg viewBox="0 0 240 84">${s}<text x="120" y="78" text-anchor="middle" font-size="15" font-weight="600" fill="var(--text-2)" style="font-family:var(--font-body)">${label}</text></svg>`;
     },
     knobs: [
       { id: 'fault', label: 'What goes wrong', options: Object.keys(FAULT_LABEL).map((k) => ({ value: k, label: FAULT_LABEL[k] })) },
-      { id: 'rule', label: 'New leader by', options: Object.keys(RULE_LABEL).map((k) => ({ value: k, label: RULE_LABEL[k] })) },
+      { id: 'rule', label: 'Quorum', options: Object.keys(RULE_LABEL).map((k) => ({ value: k, label: RULE_LABEL[k] })) },
       { id: 'timeout', label: 'Election timeout', options: TIMEOUTS.map((s) => ({ value: s, label: `${s} s` })) },
     ],
     defaults: { fault: 'partition', rule: 'majority', timeout: 3 },
@@ -168,7 +176,7 @@
       c.timeout = TIMEOUTS.includes(Number(c.timeout)) ? Number(c.timeout) : 3;
       return c;
     },
-    describe: (cfg) => `${FAULT_LABEL[cfg.fault]}, ${RULE_LABEL[cfg.rule].toLowerCase()}`,
+    describe: (cfg) => `${FAULT_LABEL[cfg.fault]}, ${cfg.rule === 'majority' ? 'majority quorum' : 'no quorum'}`,
 
     run,
     defaultInput: () => 1,
@@ -184,8 +192,8 @@
       { id: 'lost', label: 'Acknowledged writes lost', kind: 'bad' },
       { id: 'flaps', label: 'Needless elections', kind: 'warn' },
       { id: 'outage', label: `Client 2 waits over ${OUTAGE} s`, kind: 'warn', fmt: (v) => (v ? 'yes' : 'no') },
-      { id: 'gap2', label: 'Client 2’s longest wait', kind: 'neutral', plain: true, fmt: (v) => `${v} s` },
-      { id: 'gap1', label: 'Client 1’s longest wait', kind: 'neutral', plain: true, fmt: (v) => `${v} s` },
+      { id: 'gap2', label: 'Client 2’s longest gap in kept writes', kind: 'neutral', plain: true, fmt: (v) => `${v} s` },
+      { id: 'gap1', label: 'Client 1’s longest gap in kept writes', kind: 'neutral', plain: true, fmt: (v) => `${v} s` },
     ],
     classify(st) {
       if (st.lost) return { kind: 'bad', label: 'split brain' };
@@ -204,16 +212,16 @@
       },
       {
         id: 'split-brain', title: 'Two leaders at once',
-        blurb: 'A partition, and no majority rule. Whose writes survive?',
+        blurb: 'A partition, and no quorum. Whose writes survive?',
         config: { fault: 'partition', rule: 'naive', timeout: 3 }, knobs: ['rule', 'timeout'],
-        nudge: 'Switch to majority votes and replay.',
-        predict: { q: 'Whoever times out first takes over, even when cut off. Will acknowledged writes be lost?', metric: 'lost' },
+        nudge: 'Switch the quorum to a majority and replay.',
+        predict: { q: 'Leaders take over and accept writes without a majority. Will acknowledged writes be lost?', metric: 'lost' },
       },
       {
         id: 'majority', title: 'A majority decides',
         blurb: 'Votes and acks need three of five. Is anything lost?',
         config: { fault: 'partition', rule: 'majority', timeout: 3 }, knobs: ['rule', 'fault'],
-        nudge: 'Nothing is lost, but look at client 1’s longest wait.',
+        nudge: 'Nothing is lost, but look at client 1’s longest gap.',
         predict: { q: 'Leaders need 3 of 5 votes, and writes need 3 of 5 acks. Will acknowledged writes be lost?', metric: 'lost' },
       },
       {
@@ -277,7 +285,7 @@
   const ROW = [244, 266];
   const SCALE = 190;           // ms of animation per model second at 1×
   const RULE = {
-    naive: 'First to time out takes over, even when cut off',
+    naive: 'No quorum: the first to time out leads, and acks writes alone',
     majority: 'A leader needs 3 of 5 votes; a write needs 3 of 5 acks',
   };
   function view(el, v, api) {
@@ -299,7 +307,7 @@
       nodes = POS.map(([x, y], k) => st.node({ x, y, w: 110, h: 40, label: `Node ${k + 1}`, sub: '', kind: 'neutral' }));
       clients = [st.node({ x: 44, y: 132, w: 48, h: 48, shape: 'person', label: 'Client 1', kind: 'data' }), st.node({ x: 516, y: 132, w: 48, h: 48, shape: 'person', label: 'Client 2', kind: 'data' })];
       ['Client 1', 'Client 2'].forEach((name, c) => st.text(10, ROW[c] + 5, `${name} writes`, { size: 14, anchor: 'start', kind: 'text2' }));
-      [0, 10, 20, 30].forEach((t) => st.text(X(t), 294, `${t} s`, { size: 14, kind: 'muted', mono: true }));
+      [0, 10, 20, 30].forEach((t) => st.text(X(t), 289, `${t} s`, { size: 14, kind: 'muted', mono: true }));
       cursor = st.line(TL0, 232, TL0, 276, { kind: 'primary', dashed: true, width: 1.5, layer: 'top' });
       clock = st.text(10, 222, '', { size: 14, anchor: 'start', mono: true, kind: 'muted' }); // clear of the node boxes
       state = POS.map((_, k) => ({ alive: true, leader: k === 0, term: 1 }));
@@ -318,7 +326,8 @@
       } else if (e.type === 'stepdown') {
         state[e.k].leader = false;
         state[e.k].term = e.newer;
-      } else if (e.type === 'cut' || e.type === 'heal') {
+      } else if (e.type === 'term') state[e.k].term = e.term;
+      else if (e.type === 'cut' || e.type === 'heal') {
         const on = e.type === 'cut';
         wall.el.style.display = on ? '' : 'none';
         wallText.show(on);
@@ -338,13 +347,13 @@
       else if (e.type === 'stepdown') log.add(`Node ${e.k + 1} sees term ${e.newer} and steps down`, 'info');
     }
     function logWrite(e) {
-      if (!e.ok) log.add(`Client ${e.c + 1}'s write fails: ${e.why === 'no majority' ? 'its leader cannot reach 3 nodes' : 'no leader it can reach'}`, 'warn');
-      else if (e.lost) log.add(`Client ${e.c + 1}'s write to node ${e.k + 1} is acknowledged, but a newer leader never gets it`, 'bad');
+      if (!e.ok) log.add(`Client ${e.c + 1}’s write fails: ${e.why === 'no majority' ? 'its leader cannot reach 3 nodes' : 'no leader it can reach'}`, 'warn');
+      else if (e.lost) log.add(`Client ${e.c + 1}’s write to node ${e.k + 1} is acknowledged, but the leader that wins never gets it`, 'bad');
     }
     function finish(e) {
       clock.set(`t = 30 s, done`);
-      if (e.lost) log.add(`${e.lost} acknowledged writes are thrown away: two leaders accepted writes at once`, 'bad');
-      else log.add(`No acknowledged write lost. Longest waits: client 1 ${e.gaps[0]} s, client 2 ${e.gaps[1]} s`, 'good');
+      if (e.lost) log.add(`${e.lost} acknowledged writes never reached the leader that won, so they are thrown away`, 'bad');
+      else log.add(`No acknowledged write lost. Longest gaps: client 1 ${e.gaps[0]} s, client 2 ${e.gaps[1]} s`, 'good');
     }
 
     function render(result, cfg, input, o) {
@@ -355,9 +364,9 @@
       if (o.preview) return Promise.resolve();
       if (!o.animate) {
         trace.forEach((e) => {
-          if (e.type === 'write') { tick(e); if (e.lost) return; }
+          if (e.type === 'write') tick(e);
           else if (e.type === 'done') finish(e);
-          else { apply(e); if (e.type !== 'start') logEvent(e, cfg); }
+          else { apply(e); if (e.type !== 'start' && e.type !== 'term') logEvent(e, cfg); }
         });
         paintNodes();
         cursor.set({ x1: X(30), x2: X(30) });
@@ -383,6 +392,7 @@
           if (!e.ok && failed++ % 4) continue; // one line per few refused writes keeps the log readable
           if (!e.ok || e.lost) logWrite(e);
         } else if (e.type === 'done') finish(e);
+        else if (e.type === 'term') { apply(e); paintNodes(); } // quiet: followers learning the new term
         else if (e.type !== 'start') {
           apply(e);
           paintNodes();
