@@ -8,8 +8,8 @@
   const DDIA = (window.DDIA = window.DDIA || {});
 
   /* ---------- bounding rules ---------- */
-  const LIMITS = { knobs: 7, optionsMin: 2, optionsMax: 5, presetKnobs: 3, slots: 5, slotStates: 4, lanes: 2, steps: 5, nudgeWords: 15, predictOptions: 3 };
-  const REQUIRED = ['id', 'title', 'chapters', 'knobs', 'defaults', 'run', 'defaultInput', 'samples', 'inputKey', 'parseInput', 'inputLabel', 'metrics', 'classify', 'view', 'presets'];
+  const LIMITS = { knobs: 7, optionsMin: 2, optionsMax: 5, presetKnobs: 3, slots: 5, slotStates: 4, lanes: 2, steps: 5, nudgeWords: 15, blurbWords: 12, whyWords: 20, predictOptions: 3 };
+  const REQUIRED = ['id', 'title', 'chapters', 'knobs', 'defaults', 'run', 'defaultInput', 'samples', 'inputKey', 'parseInput', 'inputLabel', 'metrics', 'classify', 'view', 'sketch', 'presets'];
   const words = (t) => String(t || '').trim().split(/\s+/).filter(Boolean).length;
 
   /** Every problem with a lab definition, as readable strings. [] means it follows the rules. */
@@ -39,6 +39,8 @@
       const ks = t.knobs || [];
       if (ks.length > LIMITS.presetKnobs) p.push(`${kind} ${t.id}: at most ${LIMITS.presetKnobs} knobs (has ${ks.length})`);
       ks.forEach((k) => { if (!editable.has(k)) p.push(`${kind} ${t.id}: unknown knob ${k}`); });
+      if (!t.blurb) p.push(`${kind} ${t.id}: missing blurb (the card's one line)`);
+      else if (words(t.blurb) > LIMITS.blurbWords) p.push(`${kind} ${t.id}: blurb has ${words(t.blurb)} words (max ${LIMITS.blurbWords})`);
       if (def.stepCounts) {
         const counts = def.stepCounts(configFor(def, t.config));
         if (counts.length > LIMITS.lanes) p.push(`${kind} ${t.id}: at most ${LIMITS.lanes} transactions`);
@@ -52,6 +54,7 @@
       if (pr.predict) {
         if (!pr.predict.q) p.push(`preset ${pr.id}: predict without a question`);
         if (!metricIds.has(pr.predict.metric)) p.push(`preset ${pr.id}: predict metric ${pr.predict.metric} is not a metric`);
+        if (pr.predict.config) p.push(`preset ${pr.id}: predict.config is not allowed (ask about the setup on screen; put it in config)`);
       }
     });
     (def.challenges || []).forEach((ch) => {
@@ -61,7 +64,9 @@
       (ch.criteria || []).forEach((c) => {
         if (!c.test && !metricIds.has(c.metric)) p.push(`challenge ${ch.id}: criterion "${c.label}" needs a metric or a test`);
       });
-      if (!ch.solution) p.push(`challenge ${ch.id}: missing solution (used by the tests)`);
+      if (!ch.solution) p.push(`challenge ${ch.id}: missing solution (used by the tests and "Show a solution")`);
+      else if (!ch.solution.why) p.push(`challenge ${ch.id}: missing solution.why`);
+      else if (words(ch.solution.why) > LIMITS.whyWords) p.push(`challenge ${ch.id}: solution.why has ${words(ch.solution.why)} words (max ${LIMITS.whyWords})`);
       if (ch.runs != null && !(ch.runs >= 1 && ch.runs <= 5000)) p.push(`challenge ${ch.id}: runs must be 1–5000`);
     });
     return p;

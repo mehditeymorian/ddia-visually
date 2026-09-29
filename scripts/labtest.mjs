@@ -75,7 +75,8 @@ const miniLab = (over) => Object.assign({
   defaults: { a: 1 }, run: (cfg, input) => ({ trace: [], stats: { bad: cfg.a === 2 && input > 1 ? 1 : 0 } }),
   defaultInput: () => 1, samples: () => [1, 2, 3], inputKey: String, parseInput: Number, inputLabel: String, sampleNoun: ['run', 'runs'],
   metrics: [{ id: 'bad', label: 'Bad', kind: 'bad' }], classify: () => ({ kind: 'good', label: 'ok' }), view: () => ({ render() {} }),
-  presets: [{ id: 'p', title: 'P', config: {}, knobs: ['a'], nudge: 'Try it.', predict: { q: 'Bad?', metric: 'bad' } }],
+  sketch: () => '<svg viewBox="0 0 10 10"></svg>',
+  presets: [{ id: 'p', title: 'P', blurb: 'Is it bad?', config: {}, knobs: ['a'], nudge: 'Try it.', predict: { q: 'Bad?', metric: 'bad' } }],
 }, over);
 
 test('validate enforces the bounding rules', () => {
@@ -397,6 +398,19 @@ test('predictions ask about the setup on screen', () => {
   assert.equal(ask('isolation', 'dirty-read'), 1);
   assert.equal(ask('isolation', 'lost-update'), 1);
   assert.equal(ask('isolation', 'phantom'), 1, 'row locks cannot lock a row that does not exist');
+});
+
+test('validation asks for sketches, blurbs and solution reasons, and rejects predict.config', () => {
+  const q = DDIA.lab.get('quorum');
+  const withFirst = (key, patch) => Object.assign({}, q, { [key]: [Object.assign({}, q[key][0], patch)].concat(q[key].slice(1)) });
+  const probs = (d) => DDIA.lab.validate(d).join('; ');
+  assert.match(probs(Object.assign({}, q, { sketch: undefined })), /missing sketch/);
+  assert.match(probs(withFirst('presets', { blurb: '' })), /preset basics: missing blurb/);
+  assert.match(probs(withFirst('presets', { blurb: 'one two three four five six seven eight nine ten eleven twelve thirteen' })), /preset basics: blurb has 13 words/);
+  assert.match(probs(withFirst('presets', { predict: { q: 'Stale?', metric: 'stale', config: { w: 1 } } })), /preset basics: predict\.config/);
+  assert.match(probs(withFirst('challenges', { blurb: undefined })), /challenge missed-writes: missing blurb/);
+  assert.match(probs(withFirst('challenges', { solution: { config: { w: 2, r: 2 } } })), /challenge missed-writes: missing solution\.why/);
+  assert.match(probs(withFirst('challenges', { solution: { config: { w: 2, r: 2 }, why: Array(21).fill('w').join(' ') } })), /solution\.why has 21 words/);
 });
 
 /* ---------- report ---------- */
