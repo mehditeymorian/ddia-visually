@@ -20,7 +20,7 @@ Reading 500 pages of dense text isn't for everyone. Here every idea from the boo
   - split a cluster and elect a leader;
   - count a stream while stragglers arrive late.
 
-   Each lab opens on a menu of scenarios. Every scenario asks you to predict first, and challenges grade your design against every run, with a solution after two tries. Related cards link straight into the lab.
+  Each lab opens on a menu of scenarios. Every scenario asks you to predict first, and challenges grade your design against every run, with a solution after two tries. Related cards link straight into the lab.
 - **A cheat sheet and a 5-question quiz** at the end of every chapter.
 - **Search** any concept (press `/` or `⌘K` / `Ctrl+K`) to jump straight to the card that explains it.
 - **Jump anywhere:** the sidebar lists every chapter, and every card of the chapter you are in. **← →** keys step through cards.
