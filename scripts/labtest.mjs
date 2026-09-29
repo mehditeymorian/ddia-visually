@@ -68,6 +68,68 @@ test('net drops messages to down nodes and emits send with arrive time', () => {
   assert.equal(r.trace.filter((e) => e.type === 'drop').length, 1);
 });
 
+/* ---------- lab registry + pure helpers ---------- */
+const miniLab = (over) => Object.assign({
+  id: 'x', title: 'X', chapters: [1],
+  knobs: [{ id: 'a', label: 'A', options: [{ value: 1, label: '1' }, { value: 2, label: '2' }] }],
+  defaults: { a: 1 }, run: (cfg, input) => ({ trace: [], stats: { bad: cfg.a === 2 && input > 1 ? 1 : 0 } }),
+  defaultInput: () => 1, samples: () => [1, 2, 3], inputKey: String, parseInput: Number, inputLabel: String, sampleNoun: ['run', 'runs'],
+  metrics: [{ id: 'bad', label: 'Bad', kind: 'bad' }], classify: () => ({ kind: 'good', label: 'ok' }), view: () => ({ render() {} }),
+  presets: [{ id: 'p', title: 'P', config: {}, knobs: ['a'], nudge: 'Try it.', predict: { q: 'Bad?', metric: 'bad' } }],
+}, over);
+
+test('validate enforces the bounding rules', () => {
+  const base = miniLab();
+  assert.deepEqual(DDIA.lab.validate(base), []);
+  const opts = base.knobs[0].options;
+  const many = miniLab({ knobs: Array.from({ length: 8 }, (_, i) => ({ id: 'k' + i, label: 'K', options: opts })), defaults: Object.fromEntries(Array.from({ length: 8 }, (_, i) => ['k' + i, 1])), presets: [{ id: 'p', title: 'P', config: {}, knobs: [], nudge: 'x' }] });
+  assert.match(DDIA.lab.validate(many).join(), /at most 7 knobs/);
+  const oneOpt = miniLab({ knobs: [{ id: 'a', label: 'A', options: [opts[0]] }] });
+  assert.match(DDIA.lab.validate(oneOpt).join(), /2–5 options/);
+  const wide = miniLab({ presets: [{ id: 'p', title: 'P', config: {}, knobs: ['a', 'a', 'a', 'a'], nudge: 'x' }] });
+  assert.match(DDIA.lab.validate(wide).join(), /at most 3 knobs/);
+  const wordy = miniLab({ presets: [{ id: 'p', title: 'P', config: {}, knobs: [], nudge: 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen' }] });
+  assert.match(DDIA.lab.validate(wordy).join(), /nudge/);
+  const slots = miniLab({ slots: { label: 'Slots', max: 6, states: [{ value: 'a' }, { value: 'b' }, { value: 'c' }, { value: 'd' }, { value: 'e' }] } });
+  assert.match(DDIA.lab.validate(slots).join(), /at most 5 slots/);
+  assert.match(DDIA.lab.validate(slots).join(), /at most 4 states/);
+});
+
+test('predict: never / sometimes / always from the model', () => {
+  const l = miniLab();
+  assert.equal(DDIA.lab.predict(l, { a: 1 }, 'bad').answer, 0);
+  const some = DDIA.lab.predict(l, { a: 2 }, 'bad');
+  assert.equal(some.answer, 1); assert.equal(some.hits, 2); assert.equal(some.total, 3);
+});
+
+test('checkChallenge: all-sample, current-input and custom criteria', () => {
+  const l = miniLab();
+  const ch = { id: 'c', title: 'C', goal: 'g', config: { a: 2 }, knobs: ['a'], solution: { config: { a: 1 } }, criteria: [{ label: 'never bad', metric: 'bad', max: 0 }] };
+  const r = DDIA.lab.checkChallenge(l, ch, { a: 2 }, 1);
+  assert.equal(r.ok, false); assert.equal(r.results[0].failInput, 2); assert.match(r.results[0].text, /2 of 3 runs/);
+  assert.equal(DDIA.lab.checkChallenge(l, ch, { a: 1 }, 1).ok, true);
+  const cur = { criteria: [{ label: 'bad now', metric: 'bad', min: 1, scope: 'current' }] };
+  assert.equal(DDIA.lab.checkChallenge(l, cur, { a: 2 }, 3).ok, true);
+  assert.equal(DDIA.lab.checkChallenge(l, cur, { a: 2 }, 1).ok, false);
+  const custom = { criteria: [{ label: 'custom', test: (cfg, ctx) => ({ ok: ctx.runAll(cfg).length === 3, text: 'three' }) }] };
+  assert.deepEqual(DDIA.lab.checkChallenge(l, custom, { a: 1 }, 1).results[0].text, 'three');
+});
+
+test('configFor layers defaults, base and overrides, then normalizes', () => {
+  const l = miniLab({ defaults: { a: 1, b: 5 }, normalize: (c) => Object.assign(c, { b: Math.min(c.b, 3) }) });
+  assert.deepEqual(DDIA.lab.configFor(l, { a: 2 }, { b: 9 }), { a: 2, b: 3 });
+  const d = DDIA.lab.configFor(l); d.a = 7;
+  assert.equal(l.defaults.a, 1, 'defaults are not mutated');
+});
+
+test('interleavings keep each transaction in order', () => {
+  const all = DDIA.lab.interleavings(3, 3);
+  assert.equal(all.length, 20);
+  all.forEach((o) => { assert.equal(o.filter((x) => x === 1).length, 3); assert.equal(o.length, 6); });
+  assert.equal(new Set(all.map((o) => o.join(''))).size, 20);
+  assert.equal(DDIA.lab.interleavings(5, 5).length, 252);
+});
+
 /* ---------- report ---------- */
 const failed = results.filter((r) => !r.ok);
 for (const r of results) {
