@@ -1189,6 +1189,7 @@
       /* 13 ─────────────────────────────────────────────── */
       {
         title: 'Epochs and majorities stop split brain',
+        lab: { id: 'leases', preset: 'fencing' },
         caption: 'A leader must win a majority vote for a new epoch, then a majority for each value. Any two majorities overlap, so stale leaders get caught.',
         problem: 'Two leaders',
         fix: 'Epoch numbers + quorums',

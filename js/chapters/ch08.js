@@ -416,6 +416,7 @@
       /* 4 ─────────────────────────────────────────────── */
       {
         title: 'Timeout too short or too long?',
+        lab: { id: 'leases', preset: 'crash' },
         caption: 'Short timeouts wrongly declare slow nodes dead. Long ones leave users waiting on dead nodes. Adaptive detectors learn the delay distribution.',
         problem: 'Unbounded delays',
         fix: 'Adaptive timeouts (φ accrual)',
@@ -985,6 +986,7 @@
       /* 10 ─────────────────────────────────────────────── */
       {
         title: 'Frozen node wakes up, already voted out',
+        lab: { id: 'leases', preset: 'zombie' },
         caption: 'GC, VM suspension, swapping or slow disk I/O can freeze a node mid-task. Others then vote it dead, and the majority\'s verdict must win.',
         problem: 'Process pauses',
         fix: 'The majority decides; the old leader steps down',
@@ -1093,6 +1095,7 @@
       /* 11 ─────────────────────────────────────────────── */
       {
         title: 'Expired lease, still writing? Fence it off.',
+        lab: { id: 'leases', preset: 'fencing' },
         caption: 'A paused client can wake up believing it still holds the lock. If storage rejects writes carrying an older fencing token, the stale write bounces.',
         problem: 'Zombie lock holder',
         fix: 'Fencing tokens',

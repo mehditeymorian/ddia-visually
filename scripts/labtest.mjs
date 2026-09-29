@@ -12,7 +12,7 @@ globalThis.window = globalThis;
 const loadErrors = [];
 const origError = console.error;
 console.error = (...a) => { loadErrors.push(a.map(String).join(' ')); };
-for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js', 'js/labs/partition.js']) {
+for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js', 'js/labs/partition.js', 'js/labs/leases.js']) {
   try { vm.runInThisContext(readFileSync(join(root, f), 'utf8'), { filename: f }); } catch (e) { loadErrors.push(`${f}: ${e.message}`); }
 }
 console.error = origError;
@@ -391,6 +391,41 @@ test('partition: a bar that crosses the hot line mid-phase always ends hot', () 
   });
 });
 
+/* ---------- leases lab ---------- */
+const LS = () => DDIA.lab.get('leases');
+const lsRuns = (cfg) => DDIA.lab.runAll(LS(), DDIA.lab.configFor(LS(), cfg));
+const lsCount = (cfg, metric) => lsRuns(cfg).filter((r) => r.stats[metric] > 0).length;
+
+test('leases: the same seed gives the same trace', () => {
+  const cfg = DDIA.lab.configFor(LS(), { fault: 'mixed', lease: 10, fence: 'on' });
+  assert.deepEqual(LS().run(cfg, 4), LS().run(cfg, 4));
+});
+
+test('leases: a pause shorter than the lease is harmless; a longer one lets a zombie write', () => {
+  [5, 10, 30].forEach((lease) => assert.equal(lsCount({ fault: 'short', lease, fence: 'off' }, 'corrupt'), 0, `${lease} s`));
+  const some = lsCount({ fault: 'long', lease: 10, fence: 'off' }, 'corrupt');
+  assert.ok(some > 0 && some < 100, `a 4–16 s pause beats a 10 s lease in some runs (${some})`);
+  assert.equal(lsCount({ fault: 'long', lease: 30, fence: 'off' }, 'corrupt'), 0, 'a 30 s lease outlasts every 16 s pause');
+});
+
+test('leases: fencing turns every stale write into a rejected one', () => {
+  ['short', 'long', 'crash', 'mixed'].forEach((fault) => [5, 10, 30].forEach((lease) => {
+    const off = lsRuns({ fault, lease, fence: 'off' });
+    const on = lsRuns({ fault, lease, fence: 'on' });
+    on.forEach((r, i) => {
+      assert.equal(r.stats.corrupt, 0, `${fault}, ${lease} s`);
+      assert.equal(r.stats.fenced > 0, off[i].stats.corrupt > 0, `${fault}, ${lease} s, seed ${r.input}`);
+      assert.equal(r.stats.wait, off[i].stats.wait, 'fencing never slows the handover');
+    });
+  }));
+});
+
+test('leases: after a crash client 2 waits about one lease', () => {
+  [5, 10, 30].forEach((lease) => lsRuns({ fault: 'crash', lease }).forEach((r) => {
+    assert.ok(r.stats.wait >= lease + 0.8 && r.stats.wait <= lease + 1.5, `${lease} s lease: waited ${r.stats.wait} s`);
+  }));
+});
+
 /* ---------- presets, predicts, challenges, card links ---------- */
 test('every lab passes validation', () => {
   assert.ok(DDIA.labs.length >= 2);
@@ -424,9 +459,9 @@ test('every card lab link points at a real lab and preset', () => {
   const links = [];
   const saved = DDIA.chapter;
   DDIA.chapter = (def) => def.cards.forEach((c, i) => { if (c.lab) links.push({ where: `ch${def.id}/${i + 1}`, lab: c.lab }); });
-  for (const n of ['05', '06', '07', '09']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
+  for (const n of ['05', '06', '07', '08', '09']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
   DDIA.chapter = saved;
-  assert.ok(links.length >= 18, `expected at least 18 card links, found ${links.length}`);
+  assert.ok(links.length >= 22, `expected at least 22 card links, found ${links.length}`);
   links.forEach(({ where, lab }) => {
     const l = DDIA.lab.get(lab.id);
     assert.ok(l, `${where}: no lab ${lab.id}`);
