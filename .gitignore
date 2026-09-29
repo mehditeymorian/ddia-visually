@@ -9,6 +9,7 @@
 
 # ---- Internal build notes (design spec + plan used while making the site) ----
 docs/superpowers/
+.superpowers/
 
 # ---- Local AI / tooling config ----
 .claude/

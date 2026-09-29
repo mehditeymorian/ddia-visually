@@ -12,7 +12,7 @@ The reader is a **visual learner who dislikes long text**. Every card should be 
 - **Caption:** one sentence, ≤ 25 words, stating the single takeaway.
 - **Text inside demos:** captions ≤ 15 words, and labels of 1–3 words.
 - Write **everything in your own words**. Never copy sentences, figures or long quotes from the book. Explain concepts and use your own examples. Real product names (PostgreSQL, Kafka, Cassandra…) are fine as `tags`.
-- No emoji. For button icons use plain Unicode symbols: `▶ ↺ ⟲ ✕ ✓ ★ ⚙ ✎ ◉ ⏸ ↗ ＋ − ⇄ ⚑ ✱`.
+- No emoji. A button's `icon` is one of these symbols, and the viz kit swaps it for a drawn SVG icon so every control shares one stroke: `▶` play, `↺`/`⟲` reset, `↻` refresh, `◉` read/look, `✕` crash/cancel, `＋`/`−` add/remove, `✎` write, `✱` fault, `⇄` swap/sync, `↗` send out, `⚑` decide, `⚙` process, `⏸` pause, `★` star, `✓` check. Any other symbol falls back to plain text, so stick to this list.
 
 ## Chapter definition
 
@@ -34,13 +34,15 @@ DDIA.chapter({
 ```js
 {
   title: 'Leader dies. Who takes over?',
-  caption: 'A follower gets promoted, but unsent writes on the old leader can vanish.',
+  caption: 'A follower gets promoted, but unsent writes on the old leader can vanish.',  // shown under the title, before the demo
   problem: 'Leader crash',          // optional red chip
   fix: 'Automatic failover',        // optional green chip
-  tags: ['MySQL', 'PostgreSQL'],    // optional "seen in" chips (≤ 4)
+  tags: ['MySQL', 'PostgreSQL'],    // optional, shown as an "In the wild" line under the demo (≤ 4)
   demo(el, v) { /* build the interactive visual inside el */ },
 }
 ```
+
+Optional: `lab: { id, preset, set }` links the card to a playground lab preset and shows a "Try it yourself" button. See [LABS.md](LABS.md).
 
 Every card **must** have a `demo`, and every demo **must** be interactive: it needs at least one control (button, segmented switch, slider, toggle, or stepper). "Break it, then fix it" is the house style. Let the user trigger the problem, then switch on the fix and replay.
 
@@ -83,8 +85,8 @@ Text-only kinds for `st.text` also exist: `text`, `text2`, `muted`, `accent`.
 | `v.row(parent, {center})` | horizontal flex row |
 | `v.grid(parent, minPx)` | responsive grid |
 | `v.panel(parent, title)` | bordered panel with an uppercase title |
-| `v.controls(parent, [{id, label, icon, kind: 'primary'｜'danger'｜'good'｜'ghost', onClick}])` | `{el, btn(id), set(id, {label, disabled, hidden})}` |
-| `v.segmented(parent, {options: [{value, label, kind}], value, onChange})` | `{el, get(), set(v)}`; use it for Problem/Fix or mode switches |
+| `v.controls(parent, [{id, label, icon, kind: 'primary'｜'danger'｜'good'｜'ghost', onClick}])` | `{el, btn(id), set(id, {label, disabled, hidden})}`. `primary` is the demo's main action and renders as an ink outline; the page's filled accent button is reserved for Next |
+| `v.segmented(parent, {options: [{value, label, kind}], value, onChange})` | `{el, get(), set(v)}`; use it for Problem/Fix or mode switches. An option with a `kind` shows a coloured dot, so give broken options `bad` and fixes `good` |
 | `v.slider(parent, {label, min, max, step, value, format, onInput})` | `{el, get(), set()}` |
 | `v.toggle(parent, {label, value, onChange})` | `{el, get(), set()}` |
 | `v.caption(parent, text, kind)` | `{set(text, kind)}`: a live one-liner under the visual, the narrator |
@@ -94,7 +96,7 @@ Text-only kinds for `st.text` also exist: `text`, `text2`, `muted`, `accent`.
 | `v.cell(text, kind, {sm, pop, dim, strike})` | a mono "memory cell" chip (DOM element) |
 | `v.tape(parent, items)` | a row of cells. `{set([{text, kind}]), push({text, kind})}`: logs, SSTables, byte strings |
 | `v.stat(parent, label, value, kind)` | a big number with a label. `{set(value, kind)}` |
-| `v.stepper(parent, {steps: ['caption'｜{caption, kind}], render: async (i, animate) => {}, delay, autoplay})` | ⟲ ◀ n/N Next ▶ Auto controls plus its own caption. `render(i)` must draw the full state for step `i` from scratch (usually `st.clear()` + redraw), and should animate only when `animate` is true |
+| `v.stepper(parent, {steps: ['caption'｜{caption, kind}], render: async (i, animate) => {}, delay, autoplay})` | Restart, Previous, n/N, Next step and Auto-play controls plus its own caption. `render(i)` must draw the full state for step `i` from scratch (usually `st.clear()` + redraw), and should animate only when `animate` is true |
 | `v.h(tag, attrs, ...children)` | DOM builder (`class`, `style` object, `onclick`, `text`, `html`) |
 
 ### SVG stage: `const st = v.stage(parent, {w: 560, h: 320})`

@@ -12,6 +12,7 @@
       /* 1 ─────────────────────────────────────────────── */
       {
         title: 'Eventually consistent… but when?',
+        lab: { id: 'quorum', preset: 'stale-read' },
         caption: 'Stop writing and replicas converge, but nobody promises when. Until then, a read can return an old value.',
         problem: 'Stale reads',
         fix: 'Stronger consistency models',
@@ -88,6 +89,7 @@
       /* 2 ─────────────────────────────────────────────── */
       {
         title: 'Act as if there is one copy',
+        lab: { id: 'quorum', preset: 'back-in-time' },
         caption: 'Linearizable: every operation takes effect at one instant. Once any read sees the new value, every later read must too.',
         problem: 'A later read goes back in time',
         fix: 'Linearizable register',
@@ -439,6 +441,7 @@
       /* 6 ─────────────────────────────────────────────── */
       {
         title: 'The price: availability and speed',
+        lab: { id: 'quorum', preset: 'availability' },
         caption: 'During a partition, a linearizable system must refuse some requests. Even on a healthy network, every write waits for a cross-datacenter round trip.',
         problem: 'Network partition',
         fix: 'Choose: linearizable or available',

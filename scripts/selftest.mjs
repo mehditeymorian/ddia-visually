@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Headless self-test. Usage: node scripts/selftest.mjs <chapter-number|all>
+// Headless self-test. Usage: node scripts/selftest.mjs <chapter-number|labs|all>
 // Opens index.html?selftest=N in headless Chrome, which walks every card,
-// clicks every control and answers the quiz, then prints JSON:
+// clicks every control and answers the quiz (`labs` walks every playground lab
+// tab instead, and `all` does both), then prints JSON:
 // { ok, errors[], warnings[], cards }. Exit code 1 when errors exist.
 import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
