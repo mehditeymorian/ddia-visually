@@ -854,7 +854,13 @@
           const page = main.querySelector('.lab');
           if (!page) { push('lab page did not render'); continue; }
           const opt = page.querySelector('.lab-predict-opts button');
-          if (opt) { opt.click(); await wait(500); }
+          if (opt) {
+            // nothing may reveal the outcome while the prediction is open
+            if ([...page.querySelectorAll('.lab-runbar .vz-btn, .lab-all .vz-btn')].some((b) => /Replay|Skip|Next|Random|Try all/.test(b.textContent) && !b.disabled)) push('a control can reveal the outcome before the prediction');
+            if (page.querySelector('.lab-verdict:not(.pending)')) push('readouts show the outcome before the prediction');
+            opt.click();
+            await wait(500);
+          }
           for (const b of [...page.querySelectorAll('.lab-card button')]) {
             if (!b.isConnected || b.disabled) continue;
             b.click();

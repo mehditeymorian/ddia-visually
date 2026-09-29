@@ -6,7 +6,7 @@
   const DDIA = window.DDIA;
 
   /* ---------- workload and timing (virtual ms) ---------- */
-  const WRITES = [0, 250, 500, 750];                 // the writer sets x = 1..4, one write at a time
+  const WRITES = [0, 250, 500, 750, 1250, 1500];     // the writer sets x = 1..6, one write at a time (two after the rejoin)
   const READ_START = 50, READ_EVERY = 90, READ_UNTIL = 1900; // the reader polls x; skips a poll while a read is in flight
   const TIMEOUT = 600;                                // per quorum phase: longer than the slowest round trip
   const LAG = 800;                                    // a lagging replica applies writes this late (never within a timeout)
@@ -17,7 +17,8 @@
     jittery: (rng) => (rng.chance(0.25) ? rng.int(150, 250) : rng.int(5, 40)),
   };
   const SLOT_STATES = ['up', 'lag', 'rec', 'down'];
-  const SEEDS = Array.from({ length: 100 }, (_, i) => i + 1);
+  const seeds = (n) => Array.from({ length: n }, (_, i) => i + 1);
+  const SEEDS = seeds(100);
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
   function downFn(cfg) {
@@ -216,7 +217,7 @@
 
     run: (cfg, seed) => DDIA.sim.run(model, cfg, seed),
     defaultInput: () => 1,
-    samples: () => SEEDS,
+    samples: (cfg, n) => (n ? seeds(n) : SEEDS), // challenges grade over more runs than the grid shows
     nextInput: (cfg, seed) => (seed % SEEDS.length) + 1,
     nextLabel: 'Next run',
     inputKey: String,
@@ -278,8 +279,8 @@
     challenges: [
       {
         id: 'missed-writes', title: 'Missed writes, zero stale',
-        goal: 'Replica 3 misses every write, then rejoins. Serve no stale reads and fail nothing.',
-        config: { n: 3, w: 1, r: 1, slots: ['up', 'up', 'rec'] }, knobs: ['w', 'r', 'repair'],
+        goal: 'Replica 3 misses the first writes, then rejoins. Serve no stale reads and fail nothing.',
+        config: { n: 3, w: 1, r: 1, net: 'jittery', slots: ['up', 'up', 'rec'] }, knobs: ['w', 'r', 'repair'], runs: 1000,
         criteria: [
           { label: 'No stale reads', metric: 'stale', max: 0 },
           { label: 'No failed writes or reads', metric: 'failed', max: 0 },
@@ -290,7 +291,7 @@
       {
         id: 'never-back', title: 'Never back in time',
         goal: 'On a jittery network, no read may be stale or older than the read before it, and nothing may fail.',
-        config: { n: 3, w: 1, r: 1, net: 'jittery' }, knobs: ['w', 'r', 'repair'],
+        config: { n: 3, w: 1, r: 1, net: 'jittery' }, knobs: ['w', 'r', 'repair'], runs: 1000,
         criteria: [
           { label: 'No stale reads', metric: 'stale', max: 0 },
           { label: 'No read goes back in time', metric: 'backInTime', max: 0 },
@@ -300,15 +301,15 @@
         solution: { config: { w: 2, r: 2, repair: 'sync' } },
       },
       {
-        id: 'two-down', title: 'Two down, one lagging',
-        goal: 'Five replicas: two are down and one lags. Stay available and never serve stale data.',
-        config: { n: 5, w: 3, r: 2, slots: ['up', 'up', 'lag', 'down', 'down'] }, knobs: ['w', 'r'],
+        id: 'two-rejoin', title: 'Two replicas rejoin late',
+        goal: 'Five replicas; two are down until 1 s, then rejoin with old data. Stay available and never serve stale data.',
+        config: { n: 5, w: 1, r: 1, net: 'jittery', slots: ['up', 'up', 'up', 'rec', 'rec'] }, knobs: ['w', 'r'], runs: 1000,
         criteria: [
           { label: 'No failed writes or reads', metric: 'failed', max: 0 },
           { label: 'No stale reads', metric: 'stale', max: 0 },
         ],
-        hint: 'A write that waits for the lagging replica times out. Which replicas can it count on?',
-        solution: { config: { w: 2, r: 2 } },
+        hint: 'Before 1 s only three replicas answer. After that, every read must meet every write.',
+        solution: { config: { w: 3, r: 3 } },
       },
     ],
 

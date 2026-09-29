@@ -40,7 +40,7 @@ DDIA.lab({
   disabled(cfg, knobId, value) { /* optional: grey out impossible options */ },
 
   run(cfg, input) { return { trace, stats }; },   // pure and deterministic
-  defaultInput(cfg), samples(cfg),                // one input, and every input for "all runs"
+  defaultInput(cfg), samples(cfg, count?),        // one input, and every input for "all runs" (count: see challenge runs)
   nextInput(cfg, input), nextLabel: 'Next run',   // the run bar's "next" button
   inputKey(input) → string, parseInput(string, cfg) → input | null, inputLabel(input) → 'run #7',
   sampleNoun: ['run', 'runs'],                    // "in 12 of 100 runs"
@@ -77,6 +77,7 @@ The predict answer is **computed**. The shell runs `samples()` with the preset c
   goal: 'Replica 3 misses every write, then rejoins. Serve no stale reads and fail nothing.',
   config: { n: 3, w: 1, r: 1, slots: ['up', 'up', 'rec'] }, knobs: ['w', 'r', 'repair'], // everything else is fixed
   input: [1, 1, 2, 2],                                   // optional start input
+  runs: 1000,                                            // optional: grade over more samples than the grid shows
   criteria: [
     { label: 'No stale reads', metric: 'stale', max: 0 },                  // every sample must satisfy it
     { label: 'Both leave', metric: 'anomaly', min: 1, scope: 'current' }, // only the run on screen
@@ -87,7 +88,7 @@ The predict answer is **computed**. The shell runs `samples()` with the preset c
 }
 ```
 
-The tests require every challenge to **fail at its start config** and **pass with its solution**.
+The tests require every challenge to **fail at its start config** and **pass with its solution**. Grade over enough samples that a design which is only *usually* right fails. Rare anomalies are the point: "After reply" read repair goes back in time in about 7 of 1000 runs, so the Quorum challenges use `runs: 1000`, and "Show a failing run" lets the learner watch the rare case.
 
 ## The model
 

@@ -268,6 +268,43 @@ test('isolation: SSI lets a read-only transaction commit', () => {
   assert.equal(r.stats.aborts, 0);
 });
 
+test('isolation: 2PL keeps its predicate lock when FOR UPDATE is on (no phantoms)', () => {
+  assert.equal(ibad('phantom', { iso: '2pl', lock: 'rows' }), 0);
+  assert.equal(ibad('write-skew', { iso: '2pl', lock: 'rows' }), 0);
+  assert.equal(ibad('lost-update', { iso: '2pl', lock: 'rows' }), 0);
+});
+
+test('isolation: the verdict names the anomaly that actually happened', () => {
+  const lost = I().run(icfg('lost-update', { iso: 'none', t1end: 'abort' }), [1, 1, 2, 2, 2, 1]);
+  assert.equal(lost.stats.anomaly, 1);
+  assert.equal(lost.stats.anomalyName, 'dirty read');
+  assert.match(lost.trace.find((e) => e.type === 'verdict').text, /^Dirty read: T2 used likes from T1/);
+  const skew = I().run(icfg('write-skew', { iso: 'none', t1end: 'abort' }), [1, 1, 2, 2, 2, 1]);
+  if (skew.stats.anomaly) assert.doesNotMatch(skew.trace.find((e) => e.type === 'verdict').text, /Nobody is on call/);
+  const real = I().run(icfg('lost-update'), [1, 2, 1, 1, 2, 2]);
+  assert.equal(real.stats.anomalyName, 'lost update');
+});
+
+test('isolation: "fewest aborts" does not tick its second box for an unsafe design', () => {
+  const ch = I().challenges.find((c) => c.id === 'fewest-aborts');
+  const res = DDIA.lab.checkChallenge(I(), ch, DDIA.lab.configFor(I(), ch.config), [1, 2, 1, 2, 1, 2]);
+  assert.deepEqual(res.results.map((r) => r.ok), [false, false]);
+});
+
+test('quorum: challenges reject designs that only pass by luck', () => {
+  const check = (id, over) => {
+    const ch = Q().challenges.find((c) => c.id === id);
+    return DDIA.lab.checkChallenge(Q(), ch, DDIA.lab.configFor(Q(), ch.config, over), 1).ok;
+  };
+  assert.equal(check('missed-writes', { w: 1, r: 2 }), false, 'w + r = n does not overlap');
+  assert.equal(check('missed-writes', { w: 2, r: 2 }), true);
+  assert.equal(check('never-back', { w: 2, r: 2, repair: 'async' }), false, 'repair after the reply is not enough');
+  assert.equal(check('never-back', { w: 2, r: 2, repair: 'sync' }), true);
+  assert.equal(check('two-rejoin', { w: 2, r: 3 }), false, 'w + r = n does not overlap');
+  assert.equal(check('two-rejoin', { w: 3, r: 2 }), false);
+  assert.equal(check('two-rejoin', { w: 3, r: 3 }), true);
+});
+
 /* ---------- presets, predicts, challenges, card links ---------- */
 test('every lab passes validation', () => {
   assert.ok(DDIA.labs.length >= 2);

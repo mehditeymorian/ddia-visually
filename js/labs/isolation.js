@@ -24,7 +24,7 @@
       ],
       order: [1, 2, 2, 1],
       anomaly: 'dirty read',
-      explain: (r) => `Dirty read: the buyer saw ${money(r.reads[2][0])}, a price that was never committed.`,
+      explain: (r) => (r.committed[2] && r.reads[2][0] !== r.final.price ? `Dirty read: the buyer saw ${money(r.reads[2][0])}, a price that was never committed.` : null),
     },
     'dirty-write': {
       lanes: ['T1 · Ben buys', 'T2 · Ana buys'],
@@ -35,7 +35,7 @@
       ],
       order: [1, 2, 2, 2, 1, 1],
       anomaly: 'dirty write',
-      explain: (r) => `Dirty write: the seat went to ${r.final.seat}, the invoice to ${r.final.invoice}.`,
+      explain: (r) => (r.final.seat !== r.final.invoice ? `Dirty write: the seat went to ${r.final.seat}, the invoice to ${r.final.invoice}.` : null),
     },
     'read-skew': {
       lanes: ['T1 · Transfer', 'T2 · Audit'],
@@ -50,6 +50,7 @@
       anomaly: 'read skew',
       explain: (r) => {
         const sum = r.reads[2][0] + r.reads[2][1];
+        if (!r.committed[1] || !r.committed[2] || sum === 1000) return null;
         return `Read skew: the audit counted ${money(sum)} in total, ${money(Math.abs(sum - 1000))} ${sum > 1000 ? 'appeared from nowhere' : 'vanished'}.`;
       },
     },
@@ -62,7 +63,7 @@
       ],
       order: [1, 2, 1, 1, 2, 2],
       anomaly: 'lost update',
-      explain: (r) => `Lost update: likes = ${r.final.likes} after two committed +1s.`,
+      explain: (r) => (r.committed[1] && r.committed[2] && r.final.likes !== 7 ? `Lost update: likes = ${r.final.likes} after two committed +1s.` : null),
     },
     'write-skew': {
       lanes: ['T1 · Alice', 'T2 · Bob'],
@@ -77,7 +78,7 @@
       ],
       order: [1, 2, 1, 2, 1, 2],
       anomaly: 'write skew',
-      explain: () => 'Write skew: both saw two doctors on call, both left. Nobody is on call.',
+      explain: (r) => (r.committed[1] && r.committed[2] && !r.final['oncall:alice'] && !r.final['oncall:bob'] ? 'Write skew: both saw two doctors on call, both left. Nobody is on call.' : null),
     },
     phantom: {
       lanes: ['T1 · Ana books', 'T2 · Ben books'],
@@ -92,7 +93,7 @@
       ],
       order: [1, 2, 1, 2, 1, 2],
       anomaly: 'phantom',
-      explain: () => 'Phantom: both saw room 12 free and both booked it.',
+      explain: (r) => (r.final['room12:ana'] && r.final['room12:ben'] ? 'Phantom: both saw room 12 free and both booked it.' : null),
     },
   };
 
@@ -111,7 +112,7 @@
     const plocks = new Map(); // prefix → Set<txId>   (2PL predicate locks)
     const txs = {};
     [1, 2].forEach((id) => {
-      txs[id] = { id, steps: sc.txs[id - 1], pc: 0, status: 'active', snap: null, vars: {}, reads: [], readKeys: new Set(), readPrefixes: new Set(), intentional: false };
+      txs[id] = { id, steps: sc.txs[id - 1], pc: 0, status: 'active', snap: null, vars: {}, reads: [], readKeys: new Set(), readPrefixes: new Set(), intentional: false, dirty: [] };
     });
     const trace = [];
     const row = (tx, kind, text, note) => trace.push({ t: trace.length, type: 'row', tx, kind, text, note: note || '' });
@@ -119,19 +120,25 @@
     const lockOf = (k) => { if (!locks.has(k)) locks.set(k, { x: 0, s: new Set() }); return locks.get(k); };
     const keysWith = (p) => [...db.keys()].filter((k) => k.startsWith(p)).sort();
     const ownVersion = (tx, k) => (db.get(k) || []).filter((v) => v.tx === tx.id && v.status === 'active').pop();
-    function visible(tx, k) {
+    function visibleVersion(tx, k) {
       const own = ownVersion(tx, k);
-      if (own) return own.val;
+      if (own) return own;
       const vs = db.get(k) || [];
       for (let i = vs.length - 1; i >= 0; i--) {
         const v = vs[i];
         if (v.status === 'aborted') continue;
-        if (level === 'none') return v.val; // uncommitted data too
+        if (level === 'none') return v; // uncommitted data too
         if (v.status !== 'committed') continue;
         if (isSI && v.cts > tx.snap) continue; // committed after my snapshot: invisible
-        return v.val;
+        return v;
       }
-      return undefined;
+      return null;
+    }
+    const visible = (tx, k) => { const v = visibleVersion(tx, k); return v ? v.val : undefined; };
+    // remember reads of another transaction's uncommitted data (a dirty read if it later aborts)
+    function noteDirty(tx, k) {
+      const v = visibleVersion(tx, k);
+      if (v && v.status === 'active' && v.tx !== tx.id) tx.dirty.push({ from: v.tx, key: k });
     }
     const newerBy = (tx, k) => { const v = (db.get(k) || []).find((x) => x.status === 'committed' && x.tx !== tx.id && x.cts > tx.snap); return v ? v.tx : 0; };
     const newerThanSnap = (tx, k) => newerBy(tx, k) !== 0;
@@ -184,16 +191,18 @@
       if (tx.snap == null) tx.snap = clock; // snapshot at the first statement
       if (st.do === 'read' || st.do === 'count') {
         const keys = st.do === 'read' ? [st.key] : keysWith(st.prefix);
-        if (cfg.lock === 'rows') {
-          const r = lockRows(tx, keys);
-          if (r && r.blocked) return r;
-          if (r && r.abort) return r.abort;
-        } else if (level === '2pl') {
+        if (level === '2pl') {
           const b = st.do === 'read' ? sBlocker(tx, st.key) : prefixBlocker(tx, st.prefix);
           if (b) return { blocked: b };
           if (st.do === 'read') lockOf(st.key).s.add(tx.id);
           else { if (!plocks.has(st.prefix)) plocks.set(st.prefix, new Set()); plocks.get(st.prefix).add(tx.id); }
         }
+        if (cfg.lock === 'rows') {
+          const r = lockRows(tx, keys);
+          if (r && r.blocked) return r;
+          if (r && r.abort) return r.abort;
+        }
+        keys.forEach((k) => noteDirty(tx, k));
         if (st.do === 'read') {
           const val = visible(tx, st.key);
           tx.vars[st.as] = val; tx.reads.push(val); tx.readKeys.add(st.key);
@@ -283,9 +292,16 @@
       return same(sortKeys(ref.final), sortKeys(final)) && p.every((id) => same(ref.reads[id], txs[id].reads));
     });
     const aborts = [1, 2].filter((id) => txs[id].status === 'aborted' && !txs[id].intentional);
-    const res = { final, reads: { 1: txs[1].reads, 2: txs[2].reads } };
+    const res = { final, reads: { 1: txs[1].reads, 2: txs[2].reads }, committed: { 1: txs[1].status === 'committed', 2: txs[2].status === 'committed' } };
     let text;
-    if (!match) text = sc.explain(res);
+    let anomalyName = '';
+    if (!match) {
+      const story = sc.explain(res);
+      const dirty = !story && committed.map((id) => txs[id].dirty.find((d) => txs[d.from].status === 'aborted') && { id, d: txs[id].dirty.find((d) => txs[d.from].status === 'aborted') }).find(Boolean);
+      if (story) { text = story; anomalyName = sc.anomaly; }
+      else if (dirty) { text = `Dirty read: T${dirty.id} used ${name(dirty.d.key)} from T${dirty.d.from}, which then rolled back.`; anomalyName = 'dirty read'; }
+      else { text = 'Not serializable: no one-at-a-time order of the committed transactions gives this result.'; anomalyName = 'not serializable'; }
+    }
     else if (aborts.length) text = `Safe: T${aborts[0]} was aborted, so the app must retry it.`;
     else if (committed.length < 2) text = `Safe: same result as running T${committed[0] || '—'} alone.`;
     else text = `Safe: same result as running T${match[0]} then T${match[1]}.`;
@@ -293,7 +309,7 @@
     trace.push({ t: trace.length, type: 'verdict', anomaly: !match, text, final, finalText });
     return {
       trace,
-      stats: { anomaly: match ? 0 : 1, aborts: aborts.length, waits: trace.filter((e) => e.kind === 'wait').length, committed: committed.length },
+      stats: { anomaly: match ? 0 : 1, anomalyName, aborts: aborts.length, waits: trace.filter((e) => e.kind === 'wait').length, committed: committed.length },
       state: { txs, final },
     };
   }
@@ -373,7 +389,7 @@
       { id: 'waits', label: 'Waits', kind: 'neutral', plain: true },
     ],
     classify(st, cfg) {
-      if (st.anomaly) return { kind: 'bad', label: cfg ? SCENARIOS[cfg.scenario].anomaly : 'anomaly' };
+      if (st.anomaly) return { kind: 'bad', label: st.anomalyName || (cfg ? SCENARIOS[cfg.scenario].anomaly : 'anomaly') };
       if (st.aborts) return { kind: 'warn', label: 'abort, retry' };
       return { kind: 'good', label: 'safe' };
     },
@@ -454,6 +470,7 @@
           {
             label: 'No other safe setup aborts less',
             test(cfg, ctx) {
+              if (ctx.runAll(cfg).some((r) => r.stats.anomaly)) return { ok: false, text: 'first keep someone on call in every order' };
               const total = (c) => ctx.runAll(c).reduce((s, r) => s + r.stats.aborts, 0);
               let best = null;
               LEVELS.forEach((iso) => ['off', 'rows'].forEach((lock) => {

@@ -62,6 +62,7 @@
         if (!c.test && !metricIds.has(c.metric)) p.push(`challenge ${ch.id}: criterion "${c.label}" needs a metric or a test`);
       });
       if (!ch.solution) p.push(`challenge ${ch.id}: missing solution (used by the tests)`);
+      if (ch.runs != null && !(ch.runs >= 1 && ch.runs <= 5000)) p.push(`challenge ${ch.id}: runs must be 1–5000`);
     });
     return p;
   }
@@ -93,12 +94,12 @@
 
   // Small per-lab memo so predict, challenge checks and the all-runs grid share one batch of runs.
   const memos = new WeakMap();
-  function runAll(l, cfg) {
+  function runAll(l, cfg, count) {
     let memo = memos.get(l);
     if (!memo) memos.set(l, (memo = new Map()));
-    const key = JSON.stringify(cfg);
+    const key = (count || '') + '|' + JSON.stringify(cfg);
     if (memo.has(key)) return memo.get(key);
-    const out = l.samples(cfg).map((input) => ({ input, stats: l.run(cfg, input).stats }));
+    const out = l.samples(cfg, count).map((input) => ({ input, stats: l.run(cfg, input).stats }));
     memo.set(key, out);
     if (memo.size > 40) memo.delete(memo.keys().next().value);
     return out;
@@ -113,12 +114,13 @@
 
   const within = (v, c) => (c.max == null || v <= c.max) && (c.min == null || v >= c.min);
 
-  /** Evaluate a challenge's criteria for a config (and the current input, for scope 'current'). */
+  /** Evaluate a challenge's criteria for a config (and the current input, for scope 'current').
+   *  ch.runs lets a challenge grade over more samples than the all-runs grid shows (rare failures). */
   function checkChallenge(l, ch, cfg, input) {
     const [one, many] = l.sampleNoun || ['run', 'runs'];
     const results = ch.criteria.map((c) => {
       if (c.test) {
-        const r = c.test(cfg, { runAll: (c2) => runAll(l, c2), run: (c2, i) => l.run(c2, i), lab: l, input });
+        const r = c.test(cfg, { runAll: (c2) => runAll(l, c2, ch.runs), run: (c2, i) => l.run(c2, i), lab: l, input });
         return { label: c.label, ok: !!r.ok, text: r.text || '', failInput: r.failInput };
       }
       const m = l.metrics.find((x) => x.id === c.metric) || { label: c.metric };
@@ -126,7 +128,7 @@
         const ok = within(l.run(cfg, input).stats[c.metric], c);
         return { label: c.label, ok, text: ok ? `yes, in this ${one}` : `not in this ${one}` };
       }
-      const all = runAll(l, cfg);
+      const all = runAll(l, cfg, ch.runs);
       const bad = all.filter((r) => !within(r.stats[c.metric], c));
       return {
         label: c.label,
@@ -254,6 +256,10 @@
     const predictRes = () => DDIA.lab.predict(l, configFor(l, tab.config, predict.config), predict.metric);
     const countText = (r) => `${r.hits} of ${r.total} ${many}`;
     function paintPredict(reveal) {
+      // while the question is open, nothing may reveal the outcome
+      peekers.forEach((b) => { b.disabled = asking; b.title = asking ? 'Predict first' : ''; });
+      if (allOpen && asking) allOpen = false;
+      paintAll();
       predictEl.textContent = '';
       predictEl.hidden = !predict;
       if (!predict) return;
@@ -328,10 +334,13 @@
       [1, 3].forEach((x) => speedSeg.appendChild(h('button', { type: 'button', class: speed === x ? 'on' : '', 'aria-pressed': speed === x ? 'true' : 'false', onclick: () => { speed = x; paintSpeed(); } }, x + '×')));
     };
     paintSpeed();
-    card.appendChild(h('div', { class: 'lab-runbar' },
+    const peekers = [
       btn('▶', 'Replay', 'primary', () => play(true)),
       btn('⇥', 'Skip to end', '', () => play(false)),
       btn('⇄', l.nextLabel || 'Next run', '', () => { input = l.nextInput(cfg, input); changed({ keepCheck: true }); }),
+    ];
+    card.appendChild(h('div', { class: 'lab-runbar' },
+      peekers,
       btn('↺', 'Reset', 'ghost', () => { cfg = base(); input = startInput(cfg); paintKnobs(); changed(); }),
       speedSeg, inputEl));
 
@@ -388,7 +397,7 @@
     const checkEl = h('div', { class: 'lab-check' });
     function paintCheck() {
       checkEl.textContent = '';
-      const n = l.samples(cfg).length;
+      const n = l.samples(cfg, tab.runs).length;
       const scopeAll = tab.criteria.some((c) => c.scope !== 'current');
       checkEl.appendChild(h('div', { class: 'lab-check-head' },
         btn('✓', scopeAll ? `Test my design (${n} ${many})` : 'Test my design', 'primary', runCheck),
@@ -419,7 +428,8 @@
     function paintAll() {
       allEl.textContent = '';
       const runs = allOpen ? runAll(l, cfg) : null;
-      allEl.appendChild(btn('▦', allOpen ? `Hide all ${many}` : `Try all ${l.samples(cfg).length} ${many}`, 'ghost', () => { allOpen = !allOpen; paintAll(); }, { 'aria-expanded': allOpen ? 'true' : 'false' }));
+      allEl.appendChild(btn('▦', allOpen ? `Hide all ${many}` : `Try all ${l.samples(cfg).length} ${many}`, 'ghost', () => { allOpen = !allOpen; paintAll(); },
+        { 'aria-expanded': allOpen ? 'true' : 'false', disabled: asking ? true : null, title: asking ? 'Predict first' : null }));
       if (!runs) return;
       const counts = new Map();
       const cur = l.inputKey(input);
@@ -451,7 +461,8 @@
       changed();
     }
     function changed(o) {
-      if (!(o && o.keepCheck)) checkRes = null;
+      const inputBound = isCh && tab.criteria.some((c) => c.scope === 'current');
+      if (!(o && o.keepCheck) || inputBound) checkRes = null;
       if (isCh) paintCheck();
       if (allOpen) paintAll();
       syncHash();
