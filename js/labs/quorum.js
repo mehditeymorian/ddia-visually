@@ -347,7 +347,7 @@
       st.text(70, 160, `waits for w = ${cfg.w}`, { size: 14, kind: 'text2' });
       st.text(70, 282, `waits for r = ${cfg.r}`, { size: 14, kind: 'text2' });
       const overlap = cfg.w + cfg.r > cfg.n;
-      st.text(250, 16, `w + r = ${cfg.w + cfg.r} ${overlap ? '>' : '≤'} n = ${cfg.n}: ${overlap ? 'quorums overlap' : 'quorums can miss'}`, { size: 14.5, kind: overlap ? 'good' : 'warn', weight: 700 });
+      st.text(220, 16, `w + r = ${cfg.w + cfg.r} ${overlap ? '>' : '≤'} n = ${cfg.n}: ${overlap ? 'quorums overlap' : 'quorums can miss'}`, { size: 14.5, kind: overlap ? 'good' : 'warn', weight: 700 });
       clock = st.text(552, 16, 't = 0 ms', { size: 13, kind: 'muted', anchor: 'end', mono: true });
       if (api.canEdit('slots')) {
         const states = api.lab.slots.states.map((x) => x.value);
