@@ -516,6 +516,7 @@
       /* 4 ─────────────────────────────────────────────── */
       {
         title: 'Dirty read: a price that never existed',
+        lab: { id: 'isolation', preset: 'dirty-read' },
         caption: 'Read committed never shows uncommitted data: the database keeps the old committed value and serves it until the writer commits.',
         problem: 'Dirty read',
         fix: 'Read committed',
@@ -563,6 +564,7 @@
       /* 5 ─────────────────────────────────────────────── */
       {
         title: 'Dirty write: seat to Ben, ticket to Ana',
+        lab: { id: 'isolation', preset: 'dirty-write' },
         caption: 'Two bookings interleave their writes and the seat and ticket end up split. Row locks make the second writer wait.',
         problem: 'Dirty write',
         fix: 'Row-level write locks',
@@ -620,6 +622,7 @@
       /* 6 ─────────────────────────────────────────────── */
       {
         title: 'Mid-transfer, $100 appears from nowhere',
+        lab: { id: 'isolation', preset: 'read-skew' },
         caption: 'Under read committed, a report can see one account before a transfer and the other after. A snapshot freezes one consistent view.',
         problem: 'Read skew',
         fix: 'Snapshot isolation',
@@ -864,6 +867,7 @@
       /* 9 ─────────────────────────────────────────────── */
       {
         title: 'Two likes, but the counter says +1',
+        lab: { id: 'isolation', preset: 'lost-update' },
         caption: 'Two read-modify-write cycles race and one overwrites the other. Fix with atomic ops, locks, auto-detection, compare-and-set, or merging replicas.',
         problem: 'Lost update',
         fix: 'Atomic · lock · detect · CAS · merge',
@@ -959,6 +963,7 @@
       /* 10 ─────────────────────────────────────────────── */
       {
         title: 'Both doctors leave, nobody is on call',
+        lab: { id: 'isolation', preset: 'write-skew' },
         caption: 'Each doctor checks that someone else is on call, then leaves. Snapshot isolation allows this write skew; locking the rows read prevents it.',
         problem: 'Write skew',
         fix: 'Lock what you read (or serializable)',
@@ -1015,6 +1020,7 @@
       /* 11 ─────────────────────────────────────────────── */
       {
         title: 'Phantoms: checking for a row that isn’t there',
+        lab: { id: 'isolation', preset: 'phantom' },
         caption: 'Book a room, claim a username, spend from a wallet: check a condition, then insert. Locks can’t hold rows that don’t exist yet.',
         problem: 'Phantom write skew',
         fix: 'Materialize the conflict, constraints, serializable',
@@ -1250,6 +1256,7 @@
       /* 13 ─────────────────────────────────────────────── */
       {
         title: '2PL: readers and writers block each other',
+        lab: { id: 'isolation', preset: 'lost-update', set: { iso: '2pl' } },
         caption: 'Shared locks for reads, exclusive locks for writes, all held until commit. Correct, but waits pile up and deadlocks force aborts.',
         problem: 'Blocking + deadlocks',
         fix: 'Detect the cycle, abort one',
@@ -1350,6 +1357,7 @@
       /* 14 ─────────────────────────────────────────────── */
       {
         title: 'SSI: run freely, abort the stale at commit',
+        lab: { id: 'isolation', preset: 'write-skew', set: { iso: 'ssi' } },
         caption: 'Serializable snapshot isolation lets transactions run on snapshots without blocking, notices when a read went stale, and aborts at commit.',
         problem: 'Write skew',
         fix: 'Optimistic check at commit',

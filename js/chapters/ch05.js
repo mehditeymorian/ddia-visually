@@ -1118,6 +1118,7 @@
       /* 11 ─────────────────────────────────────────────── */
       {
         title: 'No leader: quorums of w and r',
+        lab: { id: 'quorum', preset: 'basics' },
         caption: 'Send each write and read to all n replicas, wait for w or r replies. If w + r > n, the sets must overlap.',
         problem: 'Replicas miss writes while down',
         fix: 'Read repair + anti-entropy',
@@ -1266,6 +1267,7 @@
       /* 12 ─────────────────────────────────────────────── */
       {
         title: 'Quorum met, yet the read is stale',
+        lab: { id: 'quorum', preset: 'back-in-time' },
         caption: 'Sloppy quorums park writes on stand-in nodes until hinted handoff returns them. Partly failed writes and restored nodes can also break the overlap.',
         problem: 'Quorum edge cases',
         fix: 'Hinted handoff, staleness monitoring',

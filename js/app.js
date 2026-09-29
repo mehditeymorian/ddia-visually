@@ -35,7 +35,7 @@
 
   /* ---------- storage ---------- */
   const KEY = 'ddia-visual-guide-v1';
-  let store = { seen: {}, quiz: {}, theme: null };
+  let store = { seen: {}, quiz: {}, theme: null, labs: {} };
   try { store = Object.assign(store, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { /* private mode */ }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* ignore */ } }
   function markSeen(chId, idx) {
@@ -80,6 +80,7 @@
     map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>',
     search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>',
     grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>',
+    flask: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6.2L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9.2V3"/><path d="M7.2 15h9.6"/></svg>',
   };
   const icon = (name) => { const sp = h('span', { html: ICON[name] }); return sp.firstChild; };
   const BRAND = '<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="9" fill="var(--accent)"/><ellipse cx="16" cy="10.5" rx="7.5" ry="2.6" fill="none" stroke="var(--on-accent)" stroke-width="2"/><path d="M8.5 10.5v10.5c0 1.4 3.4 2.6 7.5 2.6s7.5-1.2 7.5-2.6V10.5M8.5 15.8c0 1.4 3.4 2.6 7.5 2.6s7.5-1.2 7.5-2.6" fill="none" stroke="var(--on-accent)" stroke-width="2"/></svg>';
@@ -126,11 +127,33 @@
   function slideLabel(sl) { return sl.type === 'card' ? sl.card.title : sl.type === 'cheat' ? 'Cheat sheet' : 'Quiz'; }
   function slideNum(sl, i) { return sl.type === 'card' ? String(i + 1) : sl.type === 'cheat' ? '≡' : '?'; }
 
-  function paintSidebar(activeId, activeIdx) {
+  function paintSidebar(activeId, activeIdx, labActive) {
     const keepScroll = sidebar.scrollTop;
     sidebar.textContent = '';
-    sidebar.appendChild(h('a', { class: 'side-link side-home' + (activeId == null ? ' active' : ''), href: '#/' },
+    const onMap = activeId == null && labActive == null;
+    sidebar.appendChild(h('a', { class: 'side-link side-home' + (onMap ? ' active' : ''), href: '#/' },
       h('span', { class: 'num', style: { '--pc': 'var(--accent)', '--pcbg': 'var(--accent-bg)' } }, icon('map')), h('span', { class: 't' }, 'The map')));
+    if (DDIA.labs && DDIA.labs.length) {
+      const lab = labActive && labActive.id ? DDIA.lab.get(labActive.id) : null;
+      sidebar.appendChild(h('a', { class: 'side-link side-lab' + (labActive && !lab ? ' active' : ''), href: '#/lab', onclick: () => document.body.classList.remove('drawer-open') },
+        h('span', { class: 'num', style: { '--pc': 'var(--lab)', '--pcbg': 'var(--lab-bg)' } }, icon('flask')), h('span', { class: 't' }, 'Playground'),
+        h('span', { class: 'side-count' }, String(DDIA.labs.length))));
+      if (lab) {
+        const prog = labProgress(lab.id);
+        const list = h('div', { class: 'side-cards', style: { '--pc': 'var(--lab)', '--pcbg': 'var(--lab-bg)' } });
+        list.appendChild(h('div', { class: 'side-lab-name' }, lab.title));
+        lab.presets.concat(lab.challenges).forEach((t, i) => {
+          const isCh = i >= lab.presets.length;
+          const on = t.id === labActive.tab;
+          list.appendChild(h('a', {
+            class: 'side-card' + (on ? ' active' : '') + ((isCh ? prog.c[t.id] : prog.p[t.id] != null) ? ' seen' : '') + (isCh ? ' extra' : ''),
+            href: `#/lab/${lab.id}/${t.id}`, 'aria-current': on ? 'true' : null,
+            onclick: () => document.body.classList.remove('drawer-open'),
+          }, h('span', { class: 'n' }, isCh ? '★' : String(i + 1)), h('span', { class: 't' }, t.title)));
+        });
+        sidebar.appendChild(list);
+      }
+    }
     [1, 2, 3].forEach((p) => {
       const list = chapters.filter((c) => c.part === p);
       if (!list.length) return;
@@ -191,6 +214,13 @@
       h('div', null, h('h1', { html: 'Data systems, <em>drawn</em>.' }), h('p', null, 'Every chapter of the book as pictures you can poke. Pick a stop on the map.')),
       legend));
     wrap.appendChild(h('div', { class: 'map-wrap' }, buildMap()));
+    if (DDIA.labs && DDIA.labs.length) {
+      wrap.appendChild(h('a', { class: 'lab-banner', href: '#/lab' },
+        h('span', { class: 'lab-badge' }, icon('flask')),
+        h('span', { class: 'lab-banner-t' }, h('b', null, 'Playground'),
+          h('span', null, `${DDIA.labs.length} labs where you set the knobs: ${DDIA.labs.map((l) => l.short.toLowerCase()).join(', ')}. Predict, tweak, break it.`)),
+        icon('right')));
+    }
 
     const tiles = h('div', { class: 'tiles' });
     [1, 2, 3].forEach((p) => {
@@ -357,6 +387,12 @@
     const stage = h('div', { class: 'stage' });
     el.appendChild(stage);
     if (card.caption) el.appendChild(h('div', { class: 'caption' }, icon('bulb'), h('span', null, card.caption)));
+    const lab = card.lab && DDIA.lab && DDIA.lab.get(card.lab.id);
+    if (lab) {
+      const qs = Object.entries(card.lab.set || {}).map(([k, val]) => `${k}=${encodeURIComponent(val)}`).join('&');
+      el.appendChild(h('a', { class: 'lab-link', href: `#/lab/${lab.id}/${card.lab.preset}` + (qs ? '?' + qs : '') },
+        icon('flask'), h('span', null, 'Try it yourself in the ', h('b', null, lab.title)), icon('right')));
+    }
     if (typeof card.demo === 'function') {
       // mount after insertion so SVG text measurement works
       requestAnimationFrame(() => {
@@ -432,8 +468,8 @@
   }
 
   /* ---------- search ---------- */
-  // Searches chapter titles, card titles, captions, problem/fix chips, tags and
-  // cheat-sheet terms. Every token must match; title hits rank above body hits.
+  // Searches chapter titles, card titles, captions, problem/fix chips, tags,
+  // cheat-sheet terms and playground labs. Every token must match; title hits rank above body hits.
   const norm = (t) => ' ' + String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9+#]+/g, ' ').trim() + ' ';
   const MAX_RESULTS = 40;
   let searchIndex = null;
@@ -443,14 +479,26 @@
     searchIndex = [];
     chapters.forEach((ch) => {
       const cheatIdx = slides(ch).findIndex((sl) => sl.type === 'cheat');
-      searchIndex.push({ ch, idx: 0, kind: 'chapter', title: ch.title, body: ch.tagline || '' });
-      ch.cards.forEach((c, i) => searchIndex.push({
-        ch, idx: i, kind: 'card', title: c.title,
-        body: [c.caption, c.problem && 'Problem: ' + c.problem, c.fix && 'Fix: ' + c.fix, (c.tags || []).join(', ')].filter(Boolean).join(' · '),
-      }));
-      if (cheatIdx >= 0) ch.cheatsheet.forEach((t) => searchIndex.push({ ch, idx: cheatIdx, kind: 'term', title: t.term, body: t.text }));
+      const part = PARTS[ch.part] || PARTS[1];
+      const add = (idx, kind, title, body) => searchIndex.push({
+        kind, title, body, scope: ch.title, href: `#/ch/${ch.id}/${idx + 1}`, badge: String(ch.id), pc: part.color, pcbg: part.bg, order: ch.id * 1000 + idx,
+        where: `${kind === 'term' ? 'Cheat sheet' : kind === 'chapter' ? 'Chapter' : `Card ${idx + 1}`} · ${ch.short || ch.title}`,
+      });
+      add(0, 'chapter', ch.title, ch.tagline || '');
+      ch.cards.forEach((c, i) => add(i, 'card', c.title,
+        [c.caption, c.problem && 'Problem: ' + c.problem, c.fix && 'Fix: ' + c.fix, (c.tags || []).join(', ')].filter(Boolean).join(' · ')));
+      if (cheatIdx >= 0) ch.cheatsheet.forEach((t) => add(cheatIdx, 'term', t.term, t.text));
     });
-    searchIndex.forEach((e) => { e.nt = norm(e.title); e.nb = norm(e.body); e.nc = norm(e.ch.title); });
+    (DDIA.labs || []).forEach((l, li) => {
+      const add = (tab, kind, title, body, i) => searchIndex.push({
+        kind, title, body, scope: l.title + ' playground', href: `#/lab/${l.id}` + (tab ? '/' + tab : ''), badge: 'lab', pc: 'var(--lab)', pcbg: 'var(--lab-bg)',
+        order: 100000 + li * 100 + i, where: tab ? `${kind === 'challenge' ? 'Challenge' : 'Preset'} · ${l.title}` : 'Playground lab',
+      });
+      add(null, 'lab', l.title, l.tagline, 0);
+      l.presets.forEach((t, i) => add(t.id, 'preset', t.title, [t.nudge, t.predict && t.predict.q].filter(Boolean).join(' · '), i + 1));
+      l.challenges.forEach((t, i) => add(t.id, 'challenge', t.title, t.goal, 50 + i));
+    });
+    searchIndex.forEach((e) => { e.nt = norm(e.title); e.nb = norm(e.body); e.nc = norm(e.scope); });
   }
   function runSearch(q) {
     if (!searchIndex) buildIndex();
@@ -471,10 +519,10 @@
       }
       if (!ok) continue;
       if (toks.length > 1) score += e.nt.includes(nq) ? 16 : e.nb.includes(nq) ? 10 : 0;
-      score += e.kind === 'chapter' ? 2 : e.kind === 'term' ? 1.5 : 0;
+      score += e.kind === 'chapter' || e.kind === 'lab' ? 2 : e.kind === 'term' ? 1.5 : 0;
       hits.push({ e, score });
     }
-    hits.sort((a, b) => b.score - a.score || a.e.ch.id - b.e.ch.id || a.e.idx - b.e.idx);
+    hits.sort((a, b) => b.score - a.score || a.e.order - b.e.order);
     return hits.slice(0, MAX_RESULTS).map((x) => x.e);
   }
   // Wrap query tokens found in text with <mark>, without touching innerHTML.
@@ -530,7 +578,7 @@
   function openResult(e) {
     closeSearch();
     searchInput.blur();
-    location.hash = `#/ch/${e.ch.id}/${e.idx + 1}`;
+    location.hash = e.href;
   }
   function moveSel(d) {
     if (!searchResults.length) return;
@@ -548,7 +596,7 @@
       }
     });
   }
-  const SEARCH_TIPS = ['quorum', 'write skew', 'Kafka', 'B-tree', 'linearizable', 'fencing token', 'MapReduce', 'percentiles', 'snapshot isolation', 'hot spot'];
+  const SEARCH_TIPS = ['quorum', 'write skew', 'Kafka', 'B-tree', 'linearizable', 'fencing token', 'MapReduce', 'percentiles', 'snapshot isolation', 'hot spot', 'lab'];
   function paintSearch() {
     const q = searchInput.value;
     searchPop.textContent = '';
@@ -572,28 +620,59 @@
     const n = searchResults.length;
     searchPop.appendChild(h('div', { class: 'search-head' }, `${n}${n === MAX_RESULTS ? '+' : ''} match${n === 1 ? '' : 'es'} · ↑↓ to pick, Enter to open`));
     searchResults.forEach((e, i) => {
-      const part = PARTS[e.ch.part] || PARTS[1];
-      const where = e.kind === 'term' ? 'Cheat sheet' : e.kind === 'chapter' ? 'Chapter' : `Card ${e.idx + 1}`;
+      const isLab = e.badge === 'lab';
       searchPop.appendChild(h('a', {
         class: 'search-item' + (i === searchSel ? ' sel' : ''), role: 'option', 'aria-selected': i === searchSel ? 'true' : 'false',
-        href: `#/ch/${e.ch.id}/${e.idx + 1}`,
-        style: { '--pc': part.color, '--pcbg': part.bg },
+        href: e.href,
+        style: { '--pc': e.pc, '--pcbg': e.pcbg },
         onclick: (ev) => { ev.preventDefault(); openResult(e); },
         onmousemove: () => { if (searchSel !== i) { searchSel = i; paintSel(); } },
       },
-        h('span', { class: 'search-badge' + (e.kind === 'term' ? ' term' : '') }, String(e.ch.id)),
+        h('span', { class: 'search-badge' + (e.kind === 'term' ? ' term' : '') + (isLab ? ' lab' : '') }, isLab ? icon('flask') : e.badge),
         h('span', { class: 'search-body' },
           h('span', { class: 'search-title' }, highlight(e.title, toks)),
-          h('span', { class: 'search-meta' }, `${where} · ${e.ch.short || e.ch.title}`),
+          h('span', { class: 'search-meta' }, e.where),
           e.body ? h('span', { class: 'search-snip' }, highlight(snippet(e.body, toks), toks)) : null)));
     });
   }
   DDIA.search = runSearch;
 
+  /* ---------- playground labs ---------- */
+  function labProgress(id) {
+    const all = store.labs || (store.labs = {});
+    const p = all[id] || (all[id] = {});
+    p.p = p.p || {};
+    p.c = p.c || {};
+    return p;
+  }
+  // cards whose `lab` field points at this lab tab (the card is the single source of truth)
+  function relatedCards(labId, tabId) {
+    const out = [];
+    chapters.forEach((ch) => ch.cards.forEach((c, i) => {
+      if (c.lab && c.lab.id === labId && c.lab.preset === tabId) out.push({ href: `#/ch/${ch.id}/${i + 1}`, text: `Ch ${ch.id} · ${c.title}` });
+    }));
+    return out;
+  }
+  const labEnv = {
+    icon,
+    progress: labProgress,
+    save,
+    related: relatedCards,
+    chapterTitle: (id) => { const c = getChapter(id); return c ? c.title : ''; },
+    replaceHash(hash) {
+      if (location.hash === hash) return;
+      history.replaceState(null, '', hash);
+      lastRoute = parse();
+    },
+    onProgress() { if (labActive) paintSidebar(null, null, labActive); },
+  };
+
   /* ---------- router ---------- */
   function parse() {
     const m = location.hash.match(/^#\/ch\/(\d+)(?:\/(\d+))?/);
     if (m) return { ch: Number(m[1]), idx: m[2] ? Number(m[2]) - 1 : 0 };
+    const lm = location.hash.match(/^#\/lab(?:\/([\w-]+))?(?:\/([\w-]+))?\/?(?:\?(.*))?$/);
+    if (lm) return { lab: lm[1] || null, tab: lm[2] || null, query: lm[3] || '', labRoute: true };
     return { home: true };
   }
   function go(chId, idx) { location.hash = `#/ch/${chId}/${idx + 1}`; }
@@ -606,12 +685,38 @@
     if (d > 0 && i < chapters.length - 1) return go(chapters[i + 1].id, 0);
   }
   let lastRoute = null;
+  let labScope = null;
+  let labActive = null;
   function route() {
     if (current && current.scope) current.scope.dispose();
+    if (labScope) labScope.dispose();
     current = null;
+    labScope = null;
+    labActive = null;
     const r = parse();
     main.textContent = '';
     let dir = 1;
+    if (r.labRoute) {
+      const lab = r.lab && DDIA.lab.get(r.lab);
+      if (r.lab && !lab) { location.hash = '#/lab'; return; }
+      if (!lab) {
+        main.appendChild(DDIA.lab.renderHub(labEnv));
+        paintSidebar(null, null, {});
+        document.title = 'Playground — DDIA visually';
+      } else {
+        const tab = lab.presets.concat(lab.challenges).find((t) => t.id === r.tab) || lab.presets[0];
+        labScope = DDIA.viz.scope();
+        main.appendChild(DDIA.lab.renderPage(lab, tab.id, r.query, labScope, labEnv));
+        labActive = { id: lab.id, tab: tab.id };
+        paintSidebar(null, null, labActive);
+        document.title = `${tab.title} · ${lab.title} — DDIA visually`;
+      }
+      const sameLab = lastRoute && lastRoute.labRoute && lastRoute.lab === r.lab;
+      if (!sameLab) window.scrollTo(0, 0);
+      lastRoute = r;
+      paintOverall();
+      return;
+    }
     if (r.home) {
       main.appendChild(renderHome());
       paintSidebar(null);
@@ -646,7 +751,7 @@
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => paintThemeBtn());
 
-  /* ---------- self-test (index.html?selftest=5 or ?selftest=all) ---------- */
+  /* ---------- self-test (index.html?selftest=5, ?selftest=labs or ?selftest=all) ---------- */
   async function selftest(which) {
     const errors = [], warnings = [], cards = [];
     let where = 'boot';
@@ -656,8 +761,17 @@
     const origErr = console.error;
     console.error = (...a) => { push(a.map((x) => (x && x.stack) || String(x)).join(' ')); origErr.apply(console, a); };
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    const list = which === 'all' ? chapters.slice() : chapters.filter((c) => String(c.id) === String(which));
-    if (!list.length) push(`chapter ${which} not registered (syntax error or missing file?)`);
+    const list = which === 'all' ? chapters.slice() : which === 'labs' ? [] : chapters.filter((c) => String(c.id) === String(which));
+    if (!list.length && which !== 'labs') push(`chapter ${which} not registered (syntax error or missing file?)`);
+    // drawn content should stay inside each SVG's viewBox
+    const checkOverflow = (root) => root.querySelectorAll('svg.vz-svg').forEach((svg, k) => {
+      const vb = svg.viewBox.baseVal;
+      try {
+        const bb = svg.getBBox();
+        const over = Math.max(vb.x - bb.x, vb.y - bb.y, bb.x + bb.width - (vb.x + vb.width), bb.y + bb.height - (vb.y + vb.height));
+        if (over > 8) warnings.push(`${where}: svg #${k + 1} content overflows viewBox by ${Math.round(over)}px (bbox ${Math.round(bb.x)},${Math.round(bb.y)} ${Math.round(bb.width)}x${Math.round(bb.height)} vs ${vb.width}x${vb.height})`);
+      } catch (e) { /* hidden */ }
+    });
     for (const ch of list) {
       where = `ch${ch.id}`;
       if (!ch.title || !ch.part || !ch.tagline) warnings.push(`${where}: missing title/part/tagline`);
@@ -698,15 +812,7 @@
             }
           }
           await wait(2200);
-          // layout check: drawn content should stay inside the viewBox
-          stage.querySelectorAll('svg.vz-svg').forEach((svg, k) => {
-            const vb = svg.viewBox.baseVal;
-            try {
-              const bb = svg.getBBox();
-              const over = Math.max(vb.x - bb.x, vb.y - bb.y, bb.x + bb.width - (vb.x + vb.width), bb.y + bb.height - (vb.y + vb.height));
-              if (over > 8) warnings.push(`${where}: svg #${k + 1} content overflows viewBox by ${Math.round(over)}px (bbox ${Math.round(bb.x)},${Math.round(bb.y)} ${Math.round(bb.width)}x${Math.round(bb.height)} vs ${vb.width}x${vb.height})`);
-            } catch (e) { /* hidden */ }
-          });
+          checkOverflow(stage);
           if (stage.querySelector('.demo-error')) push('demo crashed: ' + stage.querySelector('.demo-error').textContent);
         }
         cards.push(rec);
@@ -728,6 +834,70 @@
         await wait(100);
       }
       if (!main.querySelector('.quiz-score')) push('quiz did not reach the score screen');
+    }
+    if (which === 'all' || which === 'labs') await labsWalk();
+
+    // playground: hub, every preset and challenge tab, every control, solutions, card links
+    async function labsWalk() {
+      where = 'labs';
+      if (!DDIA.labs || !DDIA.labs.length) { push('no labs registered'); return; }
+      location.hash = '#/lab';
+      await wait(500);
+      if (main.querySelectorAll('.lab-tile').length !== DDIA.labs.length) push('playground hub shows the wrong number of labs');
+      for (const l of DDIA.labs) {
+        where = `lab/${l.id}`;
+        if (l.problems && l.problems.length) push('breaks the bounding rules: ' + l.problems.join('; '));
+        for (const t of l.presets.concat(l.challenges)) {
+          where = `lab/${l.id}/${t.id}`;
+          location.hash = `#/lab/${l.id}/${t.id}`;
+          await wait(700);
+          const page = main.querySelector('.lab');
+          if (!page) { push('lab page did not render'); continue; }
+          const opt = page.querySelector('.lab-predict-opts button');
+          if (opt) { opt.click(); await wait(500); }
+          for (const b of [...page.querySelectorAll('.lab-card button')]) {
+            if (!b.isConnected || b.disabled) continue;
+            b.click();
+            await wait(220);
+          }
+          const allBtn = [...page.querySelectorAll('.lab-all button')].find((b) => /Try all/.test(b.textContent));
+          if (allBtn) { allBtn.click(); await wait(300); }
+          const cell = page.querySelector('.lab-cell');
+          if (cell) { cell.click(); await wait(300); } else push('the all-runs grid did not open');
+          for (const slot of [...page.querySelectorAll('[data-slot]')]) { slot.dispatchEvent(new MouseEvent('click', { bubbles: true })); await wait(250); }
+          const chip = page.querySelector('.lab-step:not([disabled])');
+          if (chip) {
+            chip.click();
+            await wait(100);
+            const mover = [...page.querySelectorAll('.lab-order-bar button')].find((b) => !b.disabled);
+            if (mover) { mover.click(); await wait(300); }
+          }
+          await wait(1500);
+          checkOverflow(page);
+          if (page.querySelector('.demo-error')) push('lab crashed: ' + page.querySelector('.demo-error').textContent);
+        }
+        for (const ch of l.challenges) {
+          where = `lab/${l.id}/${ch.id}/solution`;
+          const sol = DDIA.lab.configFor(l, ch.config, ch.solution.config);
+          const inp = ch.solution.input != null ? ch.solution.input : ch.input != null ? ch.input : l.defaultInput(sol);
+          if (!DDIA.lab.checkChallenge(l, ch, sol, inp).ok) push('the challenge solution does not pass');
+        }
+      }
+      where = 'card links';
+      let firstLinked = null;
+      chapters.forEach((ch) => ch.cards.forEach((c, i) => {
+        if (!c.lab) return;
+        const l = DDIA.lab.get(c.lab.id);
+        if (!l || !l.presets.some((p) => p.id === c.lab.preset)) push(`ch${ch.id}/${i + 1}: lab link to a missing lab or preset`);
+        else if (!firstLinked) firstLinked = `#/ch/${ch.id}/${i + 1}`;
+      }));
+      if (firstLinked) {
+        location.hash = firstLinked;
+        await wait(600);
+        const link = main.querySelector('.lab-link');
+        if (!link) push(`${firstLinked}: no "Try it" link on the card`);
+        else { link.click(); await wait(700); if (!main.querySelector('.lab')) push('the card link did not open the lab'); }
+      }
     }
     const pre = h('pre', { id: 'selftest-result' }, JSON.stringify({ ok: errors.length === 0, errors, warnings, cards: cards.length }));
     document.body.appendChild(pre);
