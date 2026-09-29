@@ -1,6 +1,6 @@
 # Authoring a playground lab
 
-A **lab** is a small simulation that learners steer themselves. Cards show one scripted idea; a lab lets people try their own "what if…" and see the consequence. Each lab is one file, `js/labs/<id>.js`, that calls `DDIA.lab({...})`. `js/labs/quorum.js` (knobs + builder) and `js/labs/isolation.js` (timeline) are the reference implementations.
+A **lab** is a small simulation that learners steer themselves. Cards show one scripted idea; a lab lets people try their own "what if…" and see the consequence. Each lab is one file, `js/labs/<id>.js`, that calls `DDIA.lab({...})`. `js/labs/quorum.js` (knobs + builder, timed with `DDIA.sim`) and `js/labs/isolation.js` (timeline) are the reference implementations. `js/labs/leases.js` shows a lane timeline in seconds, and `js/labs/storage.js` redraws a structure from a per-step snapshot.
 
 There's no build step. Use plain ES2020 in a classic script, don't use `import`/`export`, and don't load external libraries. Chapter tone rules from [AUTHORING.md](AUTHORING.md) apply to all lab text.
 
@@ -127,7 +127,7 @@ run: (cfg, seed) => DDIA.sim.run(model, cfg, seed),
 - `net.send()` emits `send` with an `arrive` time, so views can animate the flight. A message to a node that is down on arrival emits `drop`.
 - The run stops when the event queue is empty. More than 50,000 events throws "simulation ran away".
 
-Step-based labs (like Isolation and Partitioning) can skip `DDIA.sim` and return a trace of rows directly. When a model has tunable constants (write counts, thresholds), prototype it over every knob combination and every sample first, so predictions and grades come out true rather than lucky; Partitioning's constants were set that way.
+Step-based labs (like Isolation, Partitioning, Storage and Streams) can skip `DDIA.sim` and return a trace of rows directly. When a model has tunable constants (write counts, thresholds), prototype it over every knob combination and every sample first, so predictions and grades come out true rather than lucky; Partitioning's constants were set that way.
 
 ## The scenario card sketch
 
