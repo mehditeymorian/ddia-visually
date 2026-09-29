@@ -252,7 +252,7 @@
   });
 
   /* ---------- view: four lanes on a 0–40 s timeline ---------- */
-  const X0 = 104, XS = 11.2; // x of 0 s, px per second
+  const X0 = 104, XS = 10.9; // x of 0 s, px per second: 40 s lands at 540, so its tick label stays inside
   const LANE = { lock: 56, c1: 118, c2: 180, store: 242 };
   const SCALE = 140; // ms of animation per model second at 1×
   function view(el, v, api) {
@@ -268,7 +268,7 @@
       st = v.stage(holder, { w: 560, h: 300, label: 'A timeline: the lock service, two clients and storage' });
       [['lock', 'Lock service'], ['c1', 'Client 1'], ['c2', 'Client 2'], ['store', 'Storage']].forEach(([k, name]) => {
         st.text(10, LANE[k] + 5, name, { size: 14, anchor: 'start', weight: 700, kind: 'text2' });
-        st.line(X0, LANE[k], 552, LANE[k], { width: 1.5, kind: 'muted' });
+        st.line(X0, LANE[k], X(40), LANE[k], { width: 1.5, kind: 'muted' });
       });
       [0, 10, 20, 30, 40].forEach((t) => st.text(X(t), 290, `${t} s`, { size: 14, kind: 'muted', mono: true }));
       cursor = st.line(X0, 30, X0, 262, { kind: 'primary', dashed: true, width: 1.5, layer: 'top' });

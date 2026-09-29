@@ -12,7 +12,7 @@ globalThis.window = globalThis;
 const loadErrors = [];
 const origError = console.error;
 console.error = (...a) => { loadErrors.push(a.map(String).join(' ')); };
-for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js', 'js/labs/partition.js', 'js/labs/leases.js']) {
+for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js', 'js/labs/partition.js', 'js/labs/leases.js', 'js/labs/clocks.js']) {
   try { vm.runInThisContext(readFileSync(join(root, f), 'utf8'), { filename: f }); } catch (e) { loadErrors.push(`${f}: ${e.message}`); }
 }
 console.error = origError;
@@ -426,6 +426,39 @@ test('leases: after a crash client 2 waits about one lease', () => {
   }));
 });
 
+/* ---------- clocks lab ---------- */
+const CK = () => DDIA.lab.get('clocks');
+const ckRuns = (cfg) => DDIA.lab.runAll(CK(), DDIA.lab.configFor(CK(), cfg));
+const ckCount = (cfg, metric) => ckRuns(cfg).filter((r) => r.stats[metric] > 0).length;
+
+test('clocks: the same seed gives the same trace', () => {
+  const cfg = DDIA.lab.configFor(CK(), { skew: 200, gap: 'fast', order: 'lamport' });
+  assert.deepEqual(CK().run(cfg, 6), CK().run(cfg, 6));
+});
+
+test('clocks: skewed wall clocks lose replies only when writes are closer than the skew', () => {
+  assert.equal(ckCount({ skew: 0, gap: 'fast', order: 'wall' }, 'lost'), 0);
+  const some = ckCount({ skew: 200, gap: 'fast', order: 'wall' }, 'lost');
+  assert.ok(some > 0 && some < 100, `200 ms skew loses a fast reply in some runs (${some})`);
+  [5, 50, 200].forEach((skew) => assert.equal(ckCount({ skew, gap: 'slow', order: 'wall' }, 'lost'), 0, `${skew} ms, a second apart`));
+});
+
+test('clocks: Lamport clocks keep causes first but not real-time order', () => {
+  [0, 50, 200].forEach((skew) => {
+    assert.equal(ckCount({ skew, gap: 'fast', order: 'lamport' }, 'lost'), 0, `${skew} ms`);
+    const broken = ckCount({ skew, gap: 'fast', order: 'lamport' }, 'order');
+    assert.ok(broken > 0 && broken < 100, `Carol sometimes sorts before Bob (${broken})`);
+  });
+});
+
+test('clocks: commit wait keeps every order and waits exactly the skew', () => {
+  [0, 5, 50, 200].forEach((skew) => ['fast', 'slow'].forEach((gap) => ckRuns({ skew, gap, order: 'wait' }).forEach((r) => {
+    assert.equal(r.stats.lost + r.stats.order, 0, `${skew} ms, ${gap}`);
+    assert.equal(r.stats.wait, skew);
+    assert.equal(r.stats.final, 3, 'the last write in real time wins');
+  })));
+});
+
 /* ---------- presets, predicts, challenges, card links ---------- */
 test('every lab passes validation', () => {
   assert.ok(DDIA.labs.length >= 2);
@@ -461,7 +494,7 @@ test('every card lab link points at a real lab and preset', () => {
   DDIA.chapter = (def) => def.cards.forEach((c, i) => { if (c.lab) links.push({ where: `ch${def.id}/${i + 1}`, lab: c.lab }); });
   for (const n of ['05', '06', '07', '08', '09']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
   DDIA.chapter = saved;
-  assert.ok(links.length >= 22, `expected at least 22 card links, found ${links.length}`);
+  assert.ok(links.length >= 26, `expected at least 26 card links, found ${links.length}`);
   links.forEach(({ where, lab }) => {
     const l = DDIA.lab.get(lab.id);
     assert.ok(l, `${where}: no lab ${lab.id}`);

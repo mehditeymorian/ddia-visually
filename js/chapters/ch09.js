@@ -643,6 +643,7 @@
       /* 8 ─────────────────────────────────────────────── */
       {
         title: 'Number events so causes come first',
+        lab: { id: 'clocks', preset: 'lamport' },
         caption: 'Per-node counters, clocks and number blocks can give an effect a smaller number than its cause. Lamport clocks take max + 1, so they never do.',
         problem: 'Non-causal sequence numbers',
         fix: 'Lamport timestamps',
@@ -777,6 +778,7 @@
       /* 9 ─────────────────────────────────────────────── */
       {
         title: 'Timestamps can’t decide right now',
+        lab: { id: 'clocks', preset: 'lamport' },
         caption: 'A Lamport order is final only after hearing from every node. A shared, totally ordered log fixes the order on delivery, so the first claim wins.',
         problem: 'Order known too late',
         fix: 'Total order broadcast',

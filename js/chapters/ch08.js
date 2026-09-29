@@ -815,6 +815,7 @@
       /* 8 ─────────────────────────────────────────────── */
       {
         title: 'Later write, earlier timestamp: silently lost',
+        lab: { id: 'clocks', preset: 'skewed' },
         caption: 'Last-write-wins trusts each node\'s clock. If the second writer\'s node lags, its newer write gets an older timestamp and is thrown away.',
         problem: 'Clock skew + last write wins',
         fix: 'Logical clocks',
@@ -898,6 +899,7 @@
       /* 9 ─────────────────────────────────────────────── */
       {
         title: 'A clock reading is a range',
+        lab: { id: 'clocks', preset: 'commit-wait' },
         caption: 'Each reading is really [earliest, latest]. Spanner waits out that uncertainty before confirming a commit, so causally later transactions get later timestamps.',
         problem: 'Overlapping uncertainty',
         fix: 'Commit wait',
