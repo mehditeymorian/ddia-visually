@@ -12,7 +12,7 @@ globalThis.window = globalThis;
 const loadErrors = [];
 const origError = console.error;
 console.error = (...a) => { loadErrors.push(a.map(String).join(' ')); };
-for (const f of ['js/sim.js', 'js/lab.js', 'js/labs/quorum.js', 'js/labs/isolation.js']) {
+for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js']) {
   try { vm.runInThisContext(readFileSync(join(root, f), 'utf8'), { filename: f }); } catch (e) { loadErrors.push(`${f}: ${e.message}`); }
 }
 console.error = origError;
@@ -350,6 +350,25 @@ test('every card lab link points at a real lab and preset', () => {
       assert.ok(knob && knob.options.some((o) => String(o.value) === String(val)), `${where}: bad override ${k}=${val}`);
     });
   });
+});
+
+/* ---------- scenario cards ---------- */
+test('labnav.status covers every card state, old progress included', () => {
+  const l = DDIA.lab.get('quorum');
+  const pre = l.presets.find((p) => p.id === 'stale-read');
+  const free = l.presets.find((p) => !p.predict);
+  const ch = l.challenges[0];
+  const st = (tab, prog) => DDIA.labnav.status(l, tab, prog).kind;
+  assert.equal(st(pre, {}), 'new');
+  assert.equal(st(pre, { p: { 'stale-read': { a: 2, ok: true } } }), 'right');
+  assert.equal(st(pre, { p: { 'stale-read': { a: 0, ok: false } } }), 'missed');
+  assert.equal(st(pre, { p: { 'stale-read': { a: -1 } } }), 'ran');
+  assert.equal(st(free, { p: {} }), 'sandbox');
+  assert.equal(st(ch, { p: {}, c: {} }), 'open', 'progress saved before f and s existed');
+  assert.equal(st(ch, { c: { [ch.id]: 1 } }), 'passed');
+  assert.equal(st(ch, { s: { [ch.id]: true } }), 'seen');
+  assert.equal(st(ch, { c: { [ch.id]: 1 }, s: { [ch.id]: true } }), 'passed', 'passed before seeing the solution');
+  assert.equal(st(Object.assign({ kind: 'challenge' }, ch), undefined), 'open', 'a copied tab still counts as a challenge');
 });
 
 /* ---------- report ---------- */
