@@ -16,7 +16,7 @@ Labs must never overwhelm. `DDIA.lab.validate()` checks these rules when the lab
 |---|---|
 | Knobs per lab | ≤ 7 |
 | Options per knob | 2–5, discrete (rendered as a segmented switch; no free numbers) |
-| Knobs shown by a preset or challenge | ≤ 3 (the rest sit behind "More knobs" in presets and are fixed in challenges) |
+| Knobs shown by a preset or challenge | ≤ 3 (the rest show as held values: a preset lets the learner open one with "Change", a challenge keeps them fixed) |
 | Builder slots | ≤ 5 slots, ≤ 4 states each |
 | Timeline | ≤ 2 transactions × ≤ 5 steps |
 | Nudge | ≤ 15 words |
@@ -28,7 +28,7 @@ Labs must never overwhelm. `DDIA.lab.validate()` checks these rules when the lab
 DDIA.lab({
   id: 'quorum',                     // URL: #/lab/quorum/<preset>
   title: 'Quorum lab',
-  short: 'Quorums',                 // used in the home banner
+  short: 'Quorums',                 // optional short name
   tagline: 'Tune w and r, break replicas, catch stale reads',
   chapters: [5, 9],
   styles: ['knobs', 'builder', 'challenges'],   // chips on the hub tile
@@ -60,7 +60,7 @@ DDIA.lab({
 {
   id: 'stale-read', title: 'Lagging replica',
   config: { n: 3, w: 1, r: 1, slots: ['up', 'up', 'lag'] },
-  knobs: ['w', 'r', 'net'],                        // ≤ 3 shown; others behind "More knobs"
+  knobs: ['w', 'r', 'net'],                        // ≤ 3 shown; others held, one "Change" away
   input: 46,                                       // optional: open on a run that shows the effect
   nudge: 'Raise w or r until the stale reads stop.',
   predict: { q: 'w = 1, r = 1… Will reads be stale?', metric: 'stale', config: { /* optional overrides to ask about */ } },

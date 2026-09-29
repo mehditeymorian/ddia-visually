@@ -340,7 +340,7 @@
         W: st.node({ x: 70, y: 100, w: 56, h: 56, shape: 'person', label: 'Writer', kind: 'data' }),
         R: st.node({ x: 70, y: 220, w: 56, h: 56, shape: 'person', label: 'Reader', kind: 'info' }),
       };
-      const ys = cfg.n === 3 ? [72, 156, 240] : [44, 101, 158, 215, 272];
+      const ys = cfg.n === 3 ? [72, 156, 240] : [56, 110, 164, 218, 272];
       reps = ys.map((y, i) => st.node({ x: 440, y, w: 150, h: cfg.n === 3 ? 52 : 44, shape: 'db', label: `Replica ${i + 1}`, sub: '', badge: 'x=0' }));
       reps.forEach((n) => {
         st.link(clients.W, n, { arrow: false, dotted: true, thin: true });

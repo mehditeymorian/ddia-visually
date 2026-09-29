@@ -96,37 +96,38 @@
   }
 
   /* ---------- icons ---------- */
+  const svgIcon = (d, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
   const ICON = {
-    menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
-    sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
-    moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>',
-    left: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
-    right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
-    bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>',
-    map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>',
-    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>',
-    grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>',
-    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
-    flask: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6.2L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9.2V3"/><path d="M7.2 15h9.6"/></svg>',
+    menu: svgIcon('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+    sun: svgIcon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+    moon: svgIcon('<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>'),
+    left: svgIcon('<path d="M15 18l-6-6 6-6"/>', 2.2),
+    right: svgIcon('<path d="M9 18l6-6-6-6"/>', 2.2),
+    bulb: svgIcon('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>'),
+    home: svgIcon('<path d="M4 10.5L12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/>'),
+    search: svgIcon('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', 2.2),
+    close: svgIcon('<path d="M6 6l12 12M18 6L6 18"/>'),
+    flask: svgIcon('<path d="M9 3h6M10 3v6.2L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9.2V3"/><path d="M7.2 15h9.6"/>'),
+    alert: svgIcon('<path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/>'),
+    quiz: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M9.7 9.4a2.4 2.4 0 1 1 3.3 2.2c-.6.3-1 .8-1 1.5v.3M12 16.6v.4"/>'),
+    wrench: svgIcon('<path d="M14.5 5.5a4 4 0 0 0 5 5L12 18l-3.5 3.5a2.1 2.1 0 0 1-3-3L9 15l7.5-7.5z" transform="translate(-1 -1)"/>'),
   };
   const icon = (name) => { if (!ICON[name]) return DDIA.viz.icon(name); const sp = h('span', { html: ICON[name] }); const svg = sp.firstChild; svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false'); return svg; };
-  const BRAND = '<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="9" fill="var(--accent)"/><ellipse cx="16" cy="10.5" rx="7.5" ry="2.6" fill="none" stroke="var(--on-accent)" stroke-width="2"/><path d="M8.5 10.5v10.5c0 1.4 3.4 2.6 7.5 2.6s7.5-1.2 7.5-2.6V10.5M8.5 15.8c0 1.4 3.4 2.6 7.5 2.6s7.5-1.2 7.5-2.6" fill="none" stroke="var(--on-accent)" stroke-width="2"/></svg>';
+  const BRAND = '<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--link)"/><ellipse cx="16" cy="10.5" rx="7.5" ry="2.6" fill="none" stroke="var(--on-accent)" stroke-width="2"/><path d="M8.5 10.5v10.5c0 1.4 3.4 2.6 7.5 2.6s7.5-1.2 7.5-2.6V10.5M8.5 15.8c0 1.4 3.4 2.6 7.5 2.6s7.5-1.2 7.5-2.6" fill="none" stroke="var(--on-accent)" stroke-width="2"/></svg>';
 
   /* ---------- shell ---------- */
   const app = document.getElementById('app');
-  let themeBtn, menuBtn, overallBar, overallTxt, sidebar, main;
+  let themeBtn, menuBtn, sidebar, main, navLab;
   function buildShell() {
     themeBtn = h('button', { class: 'icon-btn', type: 'button', onclick: toggleTheme });
     menuBtn = h('button', { class: 'icon-btn menu-btn', type: 'button', 'aria-controls': 'sidebar', 'aria-expanded': 'false', 'aria-label': 'Open chapter list', onclick: () => setDrawer(!document.body.classList.contains('drawer-open')) }, icon('menu'));
-    overallBar = h('i');
-    overallTxt = h('span');
+    navLab = h('a', { class: 'top-link', href: '#/lab' }, 'Playground');
     const topbar = h('header', { class: 'topbar' },
       menuBtn,
-      h('a', { class: 'brand', href: '#/', 'aria-label': 'DDIA visually, home', html: BRAND + '<span class="brand-name" aria-hidden="true">DDIA <em>visually</em></span>' }),
-      h('div', { class: 'spacer' }),
+      h('a', { class: 'brand', href: '#/', 'aria-label': 'DDIA visually, home', html: BRAND + '<span class="brand-name" aria-hidden="true">DDIA visually</span>' }),
       buildSearch(),
       h('div', { class: 'spacer' }),
-      h('div', { class: 'overall', title: 'Share of all cards you have opened' }, overallTxt, h('div', { class: 'bar', 'aria-hidden': 'true' }, overallBar)),
+      h('nav', { class: 'top-nav', 'aria-label': 'Sections' }, navLab),
       h('button', { class: 'icon-btn search-toggle', type: 'button', 'aria-label': 'Search', onclick: openSearch }, icon('search')),
       themeBtn,
     );
@@ -138,6 +139,12 @@
     app.append(skip, topbar, h('div', { class: 'layout' }, sidebar, main), scrim);
     paintThemeBtn();
   }
+  function paintTopNav(where) {
+    [[navLab, 'lab']].forEach(([a, key]) => {
+      a.classList.toggle('active', where === key);
+      if (where === key) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
+  }
   function setDrawer(open, returnFocus) {
     const was = document.body.classList.contains('drawer-open');
     document.body.classList.toggle('drawer-open', open);
@@ -145,7 +152,7 @@
     menuBtn.setAttribute('aria-label', open ? 'Close chapter list' : 'Open chapter list');
     menuBtn.innerHTML = open ? ICON.close : ICON.menu;
     if (open && !was) {
-      const target = sidebar.querySelector('[aria-current="true"], .side-link.active') || sidebar.querySelector('a');
+      const target = sidebar.querySelector('[aria-current="page"], [aria-current="true"], .side-link.active') || sidebar.querySelector('a');
       if (target) setTimeout(() => target.focus({ preventScroll: true }), 30);
     }
     if (!open && was && returnFocus) menuBtn.focus();
@@ -157,84 +164,57 @@
     themeBtn.setAttribute('aria-label', label);
     themeBtn.title = label;
   }
-  function paintOverall() {
-    const p = overallProgress();
-    overallBar.style.clipPath = `inset(0 ${100 - Math.round(p * 100)}% 0 0 round 3px)`;
-    overallTxt.textContent = Math.round(p * 100) + '% explored';
-  }
-
-  function ring(p, color, size = 48, stroke = 4) {
-    const r = (size - stroke) / 2, c = 2 * Math.PI * r;
-    const svg = s('svg', { viewBox: `0 0 ${size} ${size}`, 'aria-hidden': 'true' });
-    s('circle', { cx: size / 2, cy: size / 2, r, fill: 'none', stroke: 'var(--surface-3)', 'stroke-width': stroke }, svg);
-    if (p > 0) s('circle', { cx: size / 2, cy: size / 2, r, fill: 'none', stroke: color, 'stroke-width': stroke, 'stroke-linecap': 'round', 'stroke-dasharray': `${c * p} ${c}` }, svg);
-    return svg;
-  }
+  function paintOverall() { /* progress lives in the sidebar */ }
 
   // Short label for a slide (card, cheat sheet or quiz) in lists and tooltips.
-  function slideLabel(sl) { return sl.type === 'card' ? sl.card.title : sl.type === 'cheat' ? 'Cheat sheet' : 'Quiz'; }
-  function slideNum(sl, i) { return sl.type === 'card' ? String(i + 1) : sl.type === 'cheat' ? icon('list') : '?'; }
+  function slideLabel(sl) { return sl.type === 'card' ? sl.card.title : sl.type === 'cheat' ? 'Cheat sheet' : 'Quick check'; }
+  function slideNum(sl, i) { return sl.type === 'card' ? String(i + 1) : sl.type === 'cheat' ? icon('list') : icon('quiz'); }
   const closeDrawer = () => setDrawer(false);
   const doneMark = () => h('span', { class: 'done' }, icon('check'), h('span', { class: 'sr-only' }, ' (complete)'));
+  const sep = () => h('span', { class: 'sep', 'aria-hidden': 'true' }, '/');
 
   function paintSidebar(activeId, activeIdx, labActive) {
     const keepScroll = sidebar.scrollTop;
     sidebar.textContent = '';
     const pct = Math.round(overallProgress() * 100);
-    // phones hide the top-bar progress, so the drawer carries it
     sidebar.appendChild(h('div', { class: 'side-progress' },
-      h('span', null, `${pct}% of the book explored`), h('div', { class: 'bar', 'aria-hidden': 'true' }, h('i', { style: { clipPath: `inset(0 ${100 - pct}% 0 0 round 3px)` } }))));
-    const onMap = activeId == null && labActive == null;
-    sidebar.appendChild(h('a', { class: 'side-link side-home' + (onMap ? ' active' : ''), href: '#/', 'aria-current': onMap ? 'page' : null, onclick: closeDrawer },
-      h('span', { class: 'num', style: { '--pc': 'var(--accent)', '--pcbg': 'var(--accent-bg)' } }, icon('map')), h('span', { class: 't' }, 'The map')));
+      h('span', null, `${pct}% of the book explored`), h('div', { class: 'bar', 'aria-hidden': 'true' }, h('i', { style: { clipPath: `inset(0 ${100 - pct}% 0 0)` } }))));
+    const onHome = activeId == null && labActive == null;
+    sidebar.appendChild(h('a', { class: 'side-link' + (onHome ? ' active' : ''), href: '#/', 'aria-current': onHome ? 'page' : null, onclick: closeDrawer },
+      h('span', { class: 'num' }, icon('home')), h('span', { class: 't' }, 'Contents')));
     if (DDIA.labs && DDIA.labs.length) {
       const lab = labActive && labActive.id ? DDIA.lab.get(labActive.id) : null;
       const onHub = labActive && !lab;
-      sidebar.appendChild(h('a', { class: 'side-link side-lab' + (onHub ? ' active' : ''), href: '#/lab', 'aria-current': onHub ? 'page' : null, onclick: closeDrawer },
-        h('span', { class: 'num', style: { '--pc': 'var(--lab)', '--pcbg': 'var(--lab-bg)' } }, icon('flask')), h('span', { class: 't' }, 'Playground'),
-        h('span', { class: 'side-count', title: `${DDIA.labs.length} labs` }, h('span', { 'aria-hidden': 'true' }, String(DDIA.labs.length)), h('span', { class: 'sr-only' }, ` (${DDIA.labs.length} labs)`))));
-      if (lab) {
-        const prog = labProgress(lab.id);
-        const list = h('div', { class: 'side-cards', style: { '--pc': 'var(--lab)', '--pcbg': 'var(--lab-bg)' } });
-        list.appendChild(h('div', { class: 'side-lab-name' }, lab.title));
-        lab.presets.concat(lab.challenges).forEach((t, i) => {
-          const isCh = i >= lab.presets.length;
-          const on = t.id === labActive.tab;
-          list.appendChild(h('a', {
-            class: 'side-card' + (on ? ' active' : '') + ((isCh ? prog.c[t.id] : prog.p[t.id] != null) ? ' seen' : '') + (isCh ? ' extra' : ''),
-            href: `#/lab/${lab.id}/${t.id}`, 'aria-current': on ? 'true' : null,
-            onclick: closeDrawer,
-          }, h('span', { class: 'n' }, isCh ? icon('star') : String(i + 1)), h('span', { class: 't' }, t.title)));
-        });
-        sidebar.appendChild(list);
-      }
+      sidebar.appendChild(h('a', { class: 'side-link' + (onHub ? ' active' : lab ? ' open' : ''), href: '#/lab', 'aria-current': onHub ? 'page' : null, onclick: closeDrawer },
+        h('span', { class: 'num' }, icon('flask')), h('span', { class: 't' }, 'Playground'),
+        h('span', { class: 'side-count' }, `${DDIA.labs.length} labs`)));
     }
     [1, 2, 3].forEach((p) => {
       const list = chapters.filter((c) => c.part === p);
       if (!list.length) return;
-      const box = h('div', { class: 'side-part' }, h('div', { class: 'side-part-title' }, `Part ${ROMAN[p]} · ${PARTS[p].short}`));
+      const box = h('div', { class: 'side-part' }, h('div', { class: 'side-part-title' }, `Part ${ROMAN[p]} · ${PARTS[p].title}`));
       list.forEach((c) => {
-        const prog = progressOf(c);
-        const num = h('span', { class: 'num' }, String(c.id));
-        num.appendChild(ring(prog, 'var(--pc)', 32, 3));
-        const link = h('a', {
-          class: 'side-link' + (c.id === activeId ? ' active' : ''),
+        const seen = seenCount(c), total = slides(c).length;
+        const open = c.id === activeId;
+        box.appendChild(h('a', {
+          class: 'side-link' + (open ? ' open' : ''),
           href: `#/ch/${c.id}`,
-          style: { '--pc': PARTS[p].color, '--pcbg': PARTS[p].bg },
           onclick: closeDrawer,
-        }, num, h('span', { class: 't' }, c.title), prog >= 1 ? doneMark() : null);
-        box.appendChild(link);
-        if (c.id === activeId) {
+        }, h('span', { class: 'num' }, String(c.id)), h('span', { class: 't' }, c.title),
+          seen >= total ? doneMark() : seen ? h('span', { class: 'frac', title: `${seen} of ${total} opened` }, `${seen}/${total}`) : null));
+        if (open) {
           // the open chapter lists every card so any of them is one click away
-          const seen = store.seen[c.id] || [];
-          const cards = h('div', { class: 'side-cards', style: { '--pc': PARTS[p].color, '--pcbg': PARTS[p].bg } });
+          const seenList = store.seen[c.id] || [];
+          const cards = h('div', { class: 'side-cards' });
           slides(c).forEach((sl, i) => {
+            const on = i === activeIdx;
             cards.appendChild(h('a', {
-              class: 'side-card' + (i === activeIdx ? ' active' : '') + (seen.includes(i) ? ' seen' : '') + (sl.type !== 'card' ? ' extra' : ''),
+              class: 'side-card' + (on ? ' active' : '') + (seenList.includes(i) ? ' seen' : ''),
               href: `#/ch/${c.id}/${i + 1}`,
-              'aria-current': i === activeIdx ? 'true' : null,
+              'aria-current': on ? 'page' : null,
               onclick: closeDrawer,
-            }, h('span', { class: 'n' }, slideNum(sl, i)), h('span', { class: 't' }, slideLabel(sl))));
+            }, h('span', { class: 'n' }, slideNum(sl, i)), h('span', { class: 't' }, slideLabel(sl)),
+              seenList.includes(i) && !on ? h('span', { class: 'seen-mark' }, icon('check'), h('span', { class: 'sr-only' }, ' (seen)')) : null));
           });
           box.appendChild(cards);
         }
@@ -251,12 +231,6 @@
   }
 
   /* ---------- home ---------- */
-  // Hand-placed "cities" on the map: [x, y] in a 1000 x 580 viewBox.
-  const CITY = {
-    1: [120, 170], 2: [260, 110], 3: [300, 265], 4: [150, 380],
-    5: [455, 160], 6: [585, 95], 7: [620, 260], 8: [470, 330], 9: [590, 440],
-    10: [790, 190], 11: [870, 360],
-  };
   // Where a reader picks up: the last card they opened, or chapter 1.
   function resumeTarget() {
     const last = store.last && getChapter(store.last.ch);
@@ -273,44 +247,36 @@
     return i < 0 ? null : { idx: i, label: slideLabel(list[i]) };
   }
   function renderHome() {
-    const wrap = h('div', { class: 'home' });
+    const wrap = h('div', { class: 'page home' });
     const first = chapters[0];
     const resume = resumeTarget();
     const cta = resume
-      ? h('a', { class: 'btn primary hero-cta', href: `#/ch/${resume.ch.id}/${resume.idx + 1}` },
-        h('span', { class: 'hero-cta-t' }, 'Continue', h('small', null, `Chapter ${resume.ch.id} · ${resume.label}`)), icon('right'))
-      : first ? h('a', { class: 'btn primary hero-cta', href: `#/ch/${first.id}` },
-        h('span', { class: 'hero-cta-t' }, 'Start reading', h('small', null, `Chapter ${first.id} · ${first.title}`)), icon('right')) : null;
+      ? h('a', { class: 'btn primary', href: `#/ch/${resume.ch.id}/${resume.idx + 1}` }, 'Continue reading', icon('right'))
+      : first ? h('a', { class: 'btn primary', href: `#/ch/${first.id}` }, 'Start reading', icon('right')) : null;
+    const where = resume
+      ? h('span', { class: 'hero-resume' }, `Chapter ${resume.ch.id} · `, h('b', null, resume.label))
+      : first ? h('span', { class: 'hero-resume' }, `Chapter ${first.id} · `, h('b', null, first.title)) : null;
     wrap.appendChild(h('section', { class: 'hero' },
-      h('h1', { html: 'Data systems, <em>drawn</em>.' }),
-      h('p', { class: 'hero-lede' }, 'Every chapter of the book as pictures you can poke. Break it, then switch on the fix and watch it work.'),
-      h('div', { class: 'hero-actions' }, cta, h('a', { class: 'hero-alt', href: '#contents' , onclick: (e) => { e.preventDefault(); const t = document.getElementById('contents'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'or pick any chapter'))));
+      h('h1', null, 'Data systems, drawn.'),
+      h('p', { class: 'lede' }, 'Every chapter of the book as pictures you can poke. Break it, then switch on the fix and watch it work.'),
+      h('div', { class: 'hero-actions' }, cta, h('a', { class: 'hero-alt', href: '#contents', onclick: (e) => { e.preventDefault(); const t = document.getElementById('contents'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'Browse all chapters')),
+      where));
 
-    const key = h('div', { class: 'map-key' },
-      h('span', { class: 'map-key-t' }, 'Reading the drawings'),
-      legendPill('<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="3" fill="var(--k-primary-f)" stroke="var(--k-primary-s)" stroke-width="1.6"/></svg>', 'box', 'a machine or service'),
-      legendPill('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7v10c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V7" fill="var(--k-good-f)" stroke="var(--k-good-s)" stroke-width="1.6"/><ellipse cx="12" cy="7" rx="7" ry="2.5" fill="var(--k-good-f)" stroke="var(--k-good-s)" stroke-width="1.6"/></svg>', 'cylinder', 'a database'),
-      legendPill('<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="8" width="20" height="9" rx="4.5" fill="var(--k-data-f)" stroke="var(--k-data-s)" stroke-width="1.6"/></svg>', 'pill', 'a message in flight'),
-      legendPill('<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="3" fill="var(--k-bad-f)" stroke="var(--k-bad-s)" stroke-width="1.6" stroke-dasharray="3 2"/></svg>', 'red dashed', 'broken'));
-    wrap.appendChild(h('figure', { class: 'map-wrap' }, buildMap(), h('figcaption', null, key)));
-
-    if (DDIA.labs && DDIA.labs.length) {
-      wrap.appendChild(h('a', { class: 'lab-banner', href: '#/lab' },
-        h('span', { class: 'lab-badge' }, icon('flask')),
-        h('span', { class: 'lab-banner-t' }, h('b', null, 'The Playground'),
-          h('span', null, `${DDIA.labs.length} labs where you set the knobs: ${DDIA.labs.map((l) => l.short.toLowerCase()).join(' and ')}. Predict, tweak, break it.`)),
-        icon('right')));
-    }
+    wrap.appendChild(h('div', { class: 'callout note' }, icon('bulb'), h('div', null,
+      h('b', null, 'Reading the drawings'),
+      h('div', { class: 'legend' },
+        legendPill('<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="3" fill="var(--k-primary-f)" stroke="var(--k-primary-s)" stroke-width="1.6"/></svg>', 'box', 'a machine or service'),
+        legendPill('<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7v10c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V7" fill="var(--k-good-f)" stroke="var(--k-good-s)" stroke-width="1.6"/><ellipse cx="12" cy="7" rx="7" ry="2.5" fill="var(--k-good-f)" stroke="var(--k-good-s)" stroke-width="1.6"/></svg>', 'cylinder', 'a database'),
+        legendPill('<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="8" width="20" height="9" rx="4.5" fill="var(--k-data-f)" stroke="var(--k-data-s)" stroke-width="1.6"/></svg>', 'pill', 'a message in flight'),
+        legendPill('<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="3" fill="var(--k-bad-f)" stroke="var(--k-bad-s)" stroke-width="1.6" stroke-dasharray="3 2"/></svg>', 'red dashed', 'broken')))));
 
     // Contents: the book's table of contents, with where you are in each chapter.
-    // On phones it doubles as the trail (the map is too small to read there).
-    const contents = h('section', { class: 'contents', id: 'contents', 'aria-labelledby': 'contents-h' },
-      h('h2', { id: 'contents-h', class: 'contents-title' }, 'Contents'));
+    const contents = h('section', { class: 'home-sec contents', id: 'contents', 'aria-labelledby': 'contents-h' },
+      h('h2', { id: 'contents-h' }, 'Contents'));
     [1, 2, 3].forEach((p) => {
       const list = chapters.filter((c) => c.part === p);
       if (!list.length) return;
-      const part = h('div', { class: 'contents-part', style: { '--pc': PARTS[p].color, '--pcbg': PARTS[p].bg } },
-        h('h3', { class: 'contents-part-t' }, h('span', null, `Part ${ROMAN[p]}`), ' ', PARTS[p].title));
+      const part = h('div', { class: 'contents-part' }, h('h3', { class: 'contents-part-t' }, `Part ${ROMAN[p]} · ${PARTS[p].title}`));
       const ol = h('ol', { class: 'contents-list' });
       list.forEach((c) => {
         const prog = progressOf(c);
@@ -318,14 +284,13 @@
         const total = slides(c).length;
         const best = store.quiz[c.id];
         const nxt = nextUnseen(c);
-        const pin = h('span', { class: 'contents-pin' }, ring(prog, 'var(--pc)', 44, 3), h('b', null, String(c.id)));
         const status = prog >= 1 ? h('span', { class: 'contents-status done' }, icon('check'), 'Read')
-          : seen ? h('span', { class: 'contents-status' }, `${seen} of ${total}`)
-            : h('span', { class: 'contents-status quiet' }, `${c.cards.length} cards`);
+          : seen ? h('span', { class: 'contents-status' }, `${seen} of ${total} opened`)
+            : h('span', { class: 'contents-status' }, `${c.cards.length} cards`);
         ol.appendChild(h('li', null, h('a', { class: 'contents-row', href: seen && nxt ? `#/ch/${c.id}/${nxt.idx + 1}` : `#/ch/${c.id}` },
-          pin,
+          h('span', { class: 'contents-num' + (prog >= 1 ? ' done' : ''), 'aria-hidden': 'true' }, String(c.id)),
           h('span', { class: 'contents-t' },
-            h('span', { class: 'contents-name' }, c.title),
+            h('span', { class: 'contents-name' }, h('span', { class: 'sr-only' }, `Chapter ${c.id}: `), c.title),
             h('span', { class: 'contents-tag' }, c.tagline || ''),
             seen && nxt ? h('span', { class: 'contents-next' }, 'Next: ', nxt.label) : null),
           h('span', { class: 'contents-meta' }, status, best != null ? h('span', { class: 'contents-quiz' }, `Quiz ${best}/${c.quiz.length}`) : null))));
@@ -334,6 +299,13 @@
       contents.appendChild(part);
     });
     wrap.appendChild(contents);
+
+    if (DDIA.labs && DDIA.labs.length) {
+      wrap.appendChild(h('section', { class: 'home-sec', 'aria-labelledby': 'labs-h' },
+        h('h2', { id: 'labs-h' }, 'Playground'),
+        h('p', { class: 'lede' }, 'Labs where you turn the knobs. Each opens ready to run: predict, change one thing, and watch what breaks.'),
+        DDIA.lab.renderTiles(labEnv, 'h3')));
+    }
     wrap.appendChild(h('footer', { class: 'home-foot' },
       'An unofficial, visual study companion for ', h('em', null, 'Designing Data-Intensive Applications'),
       ' by Martin Kleppmann. Original explanations and drawings; not affiliated with the author or publisher. ',
@@ -342,159 +314,61 @@
   }
   function legendPill(svg, shape, meaning) { return h('span', { class: 'legend-pill', html: svg + `<span><b>${shape}</b> ${meaning}</span>` }); }
 
-  function buildMap() {
-    const W = 1000, H = 580;
-    const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, class: 'map-svg', role: 'group', 'aria-label': 'Map of the book: 11 chapters in 3 parts' });
-    // regions; every label sits centred under its region on one shared baseline
-    const regions = [
-      { p: 1, d: 'M40,90 C60,40 200,30 330,60 C400,80 390,170 380,250 C370,330 300,430 230,470 C150,510 50,470 40,380 C30,300 20,150 40,90 Z', lx: 205 },
-      { p: 2, d: 'M405,70 C470,30 640,30 690,80 C730,120 700,220 700,300 C700,400 690,500 600,515 C500,530 420,470 405,390 C390,300 360,120 405,70 Z', lx: 552 },
-      { p: 3, d: 'M725,120 C780,70 930,90 960,160 C990,240 960,380 930,440 C890,510 790,500 745,440 C715,390 690,180 725,120 Z', lx: 845 },
-    ];
-    regions.forEach((r) => {
-      s('path', { d: r.d, class: 'map-region', fill: PARTS[r.p].bg, stroke: PARTS[r.p].color }, svg);
-      const t = s('text', { x: r.lx, y: 562, 'text-anchor': 'middle', class: 'map-region-label', fill: PARTS[r.p].color }, svg);
-      t.textContent = `Part ${ROMAN[r.p]} · ${PARTS[r.p].short}`;
-    });
-    // decorations: waves between regions + compass
-    const deco = s('g', { class: 'map-deco', 'aria-hidden': 'true' }, svg);
-    [[360, 530], [700, 60], [30, 40]].forEach(([x, y]) => {
-      s('path', { d: `M${x},${y} q8,-7 16,0 t16,0 t16,0`, class: 'map-deco' }, deco);
-      s('path', { d: `M${x + 8},${y + 10} q8,-7 16,0 t16,0`, class: 'map-deco' }, deco);
-    });
-    const comp = s('g', { class: 'map-compass', transform: 'translate(930,52)', 'aria-hidden': 'true' }, svg);
-    s('circle', { r: 26, fill: 'none', stroke: 'var(--border-strong)', 'stroke-width': 1.2 }, comp);
-    s('path', { d: 'M0,-20 L6,0 L0,20 L-6,0 Z', fill: 'var(--accent)', opacity: 0.85 }, comp);
-    const n = s('text', { x: 0, y: -32, 'text-anchor': 'middle' }, comp); n.textContent = 'N';
-    // trail
-    const allIds = Object.keys(CITY).map(Number);
-    const pts = allIds.map((id) => CITY[id]);
-    let d = `M${pts[0][0]},${pts[0][1]}`;
-    for (let i = 1; i < pts.length; i++) {
-      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
-      const mx = (x0 + x1) / 2 + (i % 2 ? 30 : -30), my = (y0 + y1) / 2 + (i % 2 ? -20 : 20);
-      d += ` Q${mx},${my} ${x1},${y1}`;
-    }
-    s('path', { d, class: 'map-trail', 'aria-hidden': 'true' }, svg);
-    // cities
-    allIds.forEach((id) => {
-      const [x, y] = CITY[id];
-      const ch = getChapter(id);
-      const p = ch ? ch.part : id <= 4 ? 1 : id <= 9 ? 2 : 3;
-      const prog = ch ? progressOf(ch) : 0;
-      const a = s('a', { href: ch ? `#/ch/${id}` : '#/', class: 'map-city', 'aria-label': `Chapter ${id}: ${ch ? ch.title : 'coming soon'}${prog >= 1 ? ' (read)' : prog > 0 ? ` (${Math.round(prog * 100)}% seen)` : ''}` }, svg);
-      // position and hover-scale live on separate elements: a CSS transform on the
-      // positioned group would replace its translate() and make the pin jump away
-      const at = s('g', { transform: `translate(${x},${y})` }, a);
-      const g = s('g', { class: 'pin' }, at);
-      const R = 24, C = 2 * Math.PI * (R + 5);
-      s('circle', { r: R + 16, class: 'pin-hit' }, g);
-      s('circle', { r: R + 5, fill: 'none', stroke: 'var(--surface-3)', 'stroke-width': 4, class: 'pin-ring' }, g);
-      if (prog > 0) s('circle', { r: R + 5, fill: 'none', stroke: PARTS[p].color, 'stroke-width': 4, 'stroke-linecap': 'round', 'stroke-dasharray': `${C * prog} ${C}`, transform: 'rotate(-90)' }, g);
-      s('circle', { r: R, fill: 'var(--surface)', stroke: PARTS[p].color, 'stroke-width': 2.5 }, g);
-      const t = s('text', { 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-family': 'var(--font-display)', 'font-size': 22, 'font-weight': 600, fill: PARTS[p].color }, g);
-      t.textContent = id;
-      const nm = s('text', { x, y: y + 50, 'text-anchor': 'middle', class: 'map-city-name' }, a);
-      nm.textContent = ch ? ch.short || ch.title : '…';
-    });
-    return svg;
-  }
-
   /* ---------- chapter view ---------- */
   let current = null; // { ch, idx, scope }
-  function renderChapter(ch, idx, dir) {
+  function renderChapter(ch, idx) {
     const list = slides(ch);
     idx = Math.max(0, Math.min(list.length - 1, idx || 0));
-    const part = PARTS[ch.part] || PARTS[1];
-    const wrap = h('div', { class: 'chapter', style: { '--pc': part.color, '--pcbg': part.bg } });
-    wrap.appendChild(h('div', { class: 'ch-head' },
-      h('div', { class: 'ch-badge', 'aria-hidden': 'true' }, String(ch.id)),
-      h('div', { class: 'ch-titles' },
-        h('h1', { class: 'ch-title' }, h('span', { class: 'sr-only' }, `Chapter ${ch.id}: `), ch.title),
-        h('p', { class: 'ch-tagline' }, ch.tagline || '', h('span', { class: 'ch-part' }, `Part ${ROMAN[ch.part]} · ${part.short}`)))));
-
-    // card strip: every card is a numbered button. One tab stop; arrow keys walk the cards.
-    const seen = store.seen[ch.id] || [];
-    const peek = h('span', { class: 'strip-peek', 'aria-hidden': 'true' });
-    const showPeek = (i) => { peek.textContent = i == null ? '' : `${i + 1} · ${slideLabel(list[i])}`; peek.classList.toggle('on', i != null); };
-    const pips = h('div', { class: 'pips', role: 'group', 'aria-label': `Cards in chapter ${ch.id}` });
-    list.forEach((sl, i) => {
-      const on = i === idx;
-      pips.appendChild(h('button', {
-        type: 'button', title: slideLabel(sl), 'aria-label': `${sl.type === 'card' ? 'Card ' + (i + 1) : slideLabel(sl)}: ${slideLabel(sl)}${seen.includes(i) && !on ? ' (seen)' : ''}`,
-        'aria-current': on ? 'step' : null, tabindex: on ? '0' : '-1',
-        class: 'pip' + (sl.type !== 'card' ? ' extra' : '') + (on ? ' current' : seen.includes(i) ? ' seen' : ''),
-        onclick: () => go(ch.id, i),
-        onmouseenter: () => showPeek(i), onmouseleave: () => showPeek(null),
-        onfocus: () => showPeek(i), onblur: () => showPeek(null),
-        onkeydown: (e) => {
-          if (e.key === 'Home') { e.preventDefault(); go(ch.id, 0); }
-          else if (e.key === 'End') { e.preventDefault(); go(ch.id, list.length - 1); }
-        },
-      }, slideNum(sl, i)));
-    });
-    const tocBtn = h('button', { type: 'button', class: 'toc-btn' + (store.toc ? ' on' : ''), 'aria-expanded': store.toc ? 'true' : 'false', 'aria-controls': 'card-toc', onclick: () => {
-      store.toc = !store.toc; save();
-      toc.hidden = !store.toc;
-      tocBtn.classList.toggle('on', store.toc);
-      tocBtn.setAttribute('aria-expanded', store.toc ? 'true' : 'false');
-    } }, icon('grid'), h('span', null, 'All cards'));
-    wrap.appendChild(h('div', { class: 'strip' }, pips, tocBtn));
-    // phones scroll the strip sideways: bring the current card into view
-    requestAnimationFrame(() => {
-      const cur = pips.querySelector('.pip.current');
-      if (cur && pips.scrollWidth > pips.clientWidth) pips.scrollLeft = cur.offsetLeft - pips.clientWidth / 2 + cur.offsetWidth / 2;
-    });
-    wrap.appendChild(peek);
-    const toc = h('div', { class: 'toc', id: 'card-toc' });
-    toc.hidden = !store.toc;
-    list.forEach((sl, i) => toc.appendChild(h('a', {
-      href: `#/ch/${ch.id}/${i + 1}`, 'aria-current': i === idx ? 'step' : null,
-      class: (i === idx ? 'current' : seen.includes(i) ? 'seen' : '') + (sl.type !== 'card' ? ' extra' : ''),
-    }, h('span', { class: 'n' }, slideNum(sl, i)), h('span', { class: 't' }, slideLabel(sl)), seen.includes(i) && i !== idx ? h('span', { class: 'ok' }, icon('check'), h('span', { class: 'sr-only' }, ' (seen)')) : null)));
-    wrap.appendChild(toc);
-
+    const wrap = h('div', { class: 'page chapter' });
     const sl = list[idx];
-    const card = h('article', { class: 'card' + (dir < 0 ? ' back' : ''), 'aria-labelledby': 'card-title' });
+    const card = h('article', { class: 'card', 'aria-labelledby': 'card-title' });
     wrap.appendChild(card);
+    const meta = h('p', { class: 'page-meta' },
+      h('a', { href: `#/ch/${ch.id}` }, `Chapter ${ch.id} · ${ch.title}`),
+      sl.type === 'card' ? [sep(), h('span', null, `Card ${idx + 1} of ${ch.cards.length}`)] : null);
     const scope = DDIA.viz.scope();
-    if (sl.type === 'card') renderCard(card, ch, sl.card, idx, scope);
-    else if (sl.type === 'cheat') renderCheat(card, ch);
-    else renderQuiz(card, ch, scope);
+    if (sl.type === 'card') renderCard(card, ch, sl.card, idx, scope, meta);
+    else if (sl.type === 'cheat') renderCheat(card, ch, meta);
+    else renderQuiz(card, ch, scope, meta);
 
-    // pager: sticky at the bottom so Next never hides below a tall diagram
-    const prev = h('button', { class: 'btn nav-back', type: 'button', 'data-nav': 'back', onclick: () => step(-1), disabled: idx === 0 && ch.id === chapters[0].id ? true : null }, icon('left'), h('span', { class: 'nav-lbl' }, 'Back'));
+    // pager: previous and next as docs links; on phones it pins to the bottom edge
+    const ci = chapters.indexOf(ch);
+    const prevCh = chapters[ci - 1], nextCh = chapters[ci + 1];
+    const prevLabel = idx > 0 ? slideLabel(list[idx - 1]) : prevCh ? `Chapter ${prevCh.id}: ${prevCh.title}` : null;
+    const back = h('button', { class: 'pager-link back', type: 'button', 'data-nav': 'back', onclick: () => step(-1), disabled: prevLabel ? null : true },
+      h('small', null, icon('left'), 'Previous'), h('b', null, h('span', { class: 'full' }, prevLabel || ''), h('span', { class: 'short' }, 'Back')));
     let next;
-    if (idx < list.length - 1) {
-      next = h('button', { class: 'btn primary nav-next', type: 'button', 'data-nav': 'next', onclick: () => step(1) }, h('span', { class: 'nav-lbl' }, 'Next'), icon('right'));
-    } else {
-      const nxt = chapters[chapters.indexOf(ch) + 1];
-      next = nxt
-        ? h('a', { class: 'btn primary nav-next', href: `#/ch/${nxt.id}`, 'data-nav': 'next' }, h('span', { class: 'nav-lbl' }, `Chapter ${nxt.id}: ${nxt.title}`), icon('right'))
-        : h('a', { class: 'btn primary nav-next', href: '#/', 'data-nav': 'next' }, h('span', { class: 'nav-lbl' }, 'Back to the map'), icon('map'));
-    }
-    wrap.appendChild(h('nav', { class: 'nav', 'aria-label': 'Card pager' }, prev,
-      h('span', { class: 'nav-mid' }, h('span', { class: 'count' }, `${idx + 1} / ${list.length}`), h('span', { class: 'nav-hint', 'aria-hidden': 'true' }, h('kbd', null, '←'), h('kbd', null, '→'))),
-      next));
+    const nextBody = (label) => [h('small', null, 'Next', icon('right')), h('b', null, h('span', { class: 'full' }, label), h('span', { class: 'short' }, 'Next'))];
+    if (idx < list.length - 1) next = h('button', { class: 'pager-link next', type: 'button', 'data-nav': 'next', onclick: () => step(1) }, nextBody(slideLabel(list[idx + 1])));
+    else if (nextCh) next = h('a', { class: 'pager-link next', href: `#/ch/${nextCh.id}`, 'data-nav': 'next' }, nextBody(`Chapter ${nextCh.id}: ${nextCh.title}`));
+    else next = h('a', { class: 'pager-link next', href: '#/', 'data-nav': 'next' }, nextBody('Back to the contents'));
+    wrap.appendChild(h('nav', { class: 'pager', 'aria-label': 'Card pager' }, back, next,
+      h('div', { class: 'pager-count' }, h('span', null, sl.type === 'card' ? `Card ${idx + 1} of ${ch.cards.length}` : slideLabel(sl)), h('span', { 'aria-hidden': 'true' }, h('kbd', null, '←'), ' ', h('kbd', null, '→')))));
 
     markSeen(ch.id, idx);
     current = { ch, idx, scope, total: list.length, title: slideLabel(sl) };
     return wrap;
   }
 
-  function renderCard(el, ch, card, idx, scope) {
+  function renderCard(el, ch, card, idx, scope, meta) {
     scope.label = card.title;
-    el.appendChild(h('h2', { class: 'card-title', id: 'card-title' }, card.title));
+    el.appendChild(h('h1', { class: 'card-title', id: 'card-title' }, card.title));
+    el.appendChild(meta);
     // the one line of text leads, so the picture is read with its idea in mind
-    if (card.caption) el.appendChild(h('p', { class: 'caption' }, icon('bulb'), h('span', null, card.caption)));
+    if (card.caption) el.appendChild(h('p', { class: 'lede' }, card.caption));
     const chips = [];
-    if (card.problem) chips.push(h('span', { class: 'chip problem' }, h('span', { class: 'lbl' }, 'Problem'), card.problem));
-    if (card.fix) chips.push(h('span', { class: 'chip fix' }, h('span', { class: 'lbl' }, 'Fix'), card.fix));
+    if (card.problem) chips.push(h('span', { class: 'chip problem' }, icon('alert'), h('span', { class: 'lbl' }, 'Problem'), card.problem));
+    if (card.fix) chips.push(h('span', { class: 'chip fix' }, icon('check'), h('span', { class: 'lbl' }, 'Fix'), card.fix));
     if (chips.length) el.appendChild(h('div', { class: 'chips' }, chips));
     const stage = h('div', { class: 'stage' });
-    el.appendChild(stage);
+    // the sandbox frame: the live diagram, with a way to start it over from scratch
+    const restart = h('button', { type: 'button', class: 'frame-btn', onclick: () => mount(true) }, icon('reset'), 'Restart');
+    const frame = h('div', { class: 'sandbox' });
+    const ex = DDIA.viz.expander(frame);
+    frame.append(h('div', { class: 'sandbox-bar' }, h('span', { class: 'live' }, h('i', { 'aria-hidden': 'true' }), 'Live diagram'), h('span', { class: 'grow' }), ex.btn, restart), stage);
+    el.appendChild(frame);
     const foot = [];
-    if (card.tags && card.tags.length) foot.push(h('p', { class: 'card-wild' }, h('span', { class: 'lbl' }, 'In the wild'), ' ', card.tags.join(' · ')));
+    if (card.tags && card.tags.length) foot.push(h('p', { class: 'card-wild' }, h('span', { class: 'lbl' }, 'In the wild:'), ' ', card.tags.join(' · ')));
     const lab = card.lab && DDIA.lab && DDIA.lab.get(card.lab.id);
     if (lab) {
       const qs = Object.entries(card.lab.set || {}).map(([k, val]) => `${k}=${encodeURIComponent(val)}`).join('&');
@@ -502,17 +376,28 @@
         icon('flask'), h('span', null, 'Try it yourself in the ', h('b', null, lab.title)), icon('right')));
     }
     if (foot.length) el.appendChild(h('div', { class: 'card-foot' }, foot));
-    if (typeof card.demo === 'function') {
+    let sc = scope;
+    function mount(again) {
+      if (again) {
+        sc.dispose();
+        sc = DDIA.viz.scope();
+        sc.label = card.title;
+        if (current) current.scope = sc;
+        stage.textContent = '';
+      }
+      if (typeof card.demo !== 'function') return;
       // mount after insertion so SVG text measurement works
+      const my = sc;
       requestAnimationFrame(() => {
-        if (!scope.alive) return;
-        try { card.demo(stage, scope); } catch (err) {
+        if (!my.alive) return;
+        try { card.demo(stage, my); } catch (err) {
           console.error(`Demo crashed: ch${ch.id} card ${idx + 1} (${card.title})`, err);
           stage.textContent = '';
           stage.appendChild(demoError('This drawing failed to load.', err));
         }
       });
     }
+    mount(false);
   }
   function demoError(msg, err) {
     return h('div', { class: 'demo-error', role: 'alert' },
@@ -531,21 +416,24 @@
     return i;
   }
 
-  function renderCheat(el, ch) {
-    el.appendChild(h('h2', { class: 'card-title', id: 'card-title' }, 'Cheat sheet'));
-    el.appendChild(h('p', { class: 'caption quiet' }, icon('list'), h('span', null, `The chapter in ${ch.cheatsheet.length} terms. Follow a card link to see a term drawn.`)));
+  function renderCheat(el, ch, meta) {
+    el.appendChild(h('h1', { class: 'card-title', id: 'card-title' }, 'Cheat sheet'));
+    el.appendChild(meta);
+    el.appendChild(h('p', { class: 'lede' }, `The chapter in ${ch.cheatsheet.length} terms. Follow a card link to see a term drawn.`));
     const grid = h('dl', { class: 'cheat' });
     ch.cheatsheet.forEach((it) => {
       const ci = cardForTerm(ch, it.term);
-      grid.appendChild(h('div', { class: 'cheat-item' + (it.kind ? ' k-' + it.kind : '') },
-        h('dt', null, h('i', { class: 'cheat-dot', 'aria-hidden': 'true' }), it.term),
+      grid.appendChild(h('div', { class: 'cheat-item' },
+        h('dt', null, it.term),
         h('dd', null, it.text, ci >= 0 ? h('a', { class: 'cheat-link', href: `#/ch/${ch.id}/${ci + 1}` }, `Card ${ci + 1}`, h('span', { class: 'sr-only' }, `: ${ch.cards[ci].title}`)) : null)));
     });
     el.appendChild(grid);
   }
 
-  function renderQuiz(el, ch, scope) {
-    el.appendChild(h('h2', { class: 'card-title', id: 'card-title' }, 'Quick check'));
+  function renderQuiz(el, ch, scope, meta) {
+    el.appendChild(h('h1', { class: 'card-title', id: 'card-title' }, 'Quick check'));
+    el.appendChild(meta);
+    el.appendChild(h('p', { class: 'lede' }, `${ch.quiz.length} questions on this chapter. Answer with a click, or press 1 to ${ch.quiz.length}.`));
     const box = h('div', { class: 'quiz' });
     el.appendChild(box);
     const results = [];
@@ -614,14 +502,13 @@
         : kind === 'good' ? 'Strong. One slip to review below.'
           : kind === 'warn' ? 'Getting there. Review the misses below.'
             : 'Worth another pass through the cards. The misses are below.';
-      const ringEl = ring(r, `var(--k-${kind}-s)`, 112, 10);
       const complete = progressOf(ch) >= 1;
-      const scoreEl = h('div', { class: 'quiz-score k-' + kind, role: 'status', tabindex: '-1', 'aria-label': `Score ${score} of ${n}. ${msg}` }, h('div', { class: 'quiz-ring', 'aria-hidden': 'true' }, ringEl, h('b', null, `${score}/${n}`)),
-        h('div', null,
-          h('p', { class: 'big' }, msg),
-          complete ? h('p', { class: 'quiz-done' }, icon('check'), `You've opened every card in chapter ${ch.id}.`) : null,
-          h('div', { class: 'quiz-foot', style: { justifyContent: 'flex-start' } },
-            h('button', { type: 'button', class: 'btn', onclick: () => { results.length = 0; picks.length = 0; qi = 0; paint(true); } }, icon('reset'), 'Try again'))));
+      const scoreEl = h('div', { class: 'quiz-score k-' + kind, role: 'status', tabindex: '-1', 'aria-label': `Score ${score} of ${n}. ${msg}` },
+        h('div', { class: 'quiz-total', 'aria-hidden': 'true' }, `${score} of ${n} right`),
+        h('p', { class: 'big' }, msg),
+        complete ? h('p', { class: 'quiz-done' }, icon('check'), `You've opened every card in chapter ${ch.id}.`) : null,
+        h('div', { class: 'quiz-foot' },
+          h('button', { type: 'button', class: 'btn', onclick: () => { results.length = 0; picks.length = 0; qi = 0; paint(true); } }, icon('reset'), 'Try again')));
       box.appendChild(scoreEl);
       if (focusScore) scoreEl.focus({ preventScroll: true });
       const review = h('ol', { class: 'quiz-review', 'aria-label': 'Your answers' });
@@ -804,7 +691,7 @@
       searchPop.appendChild(h('div', { class: 'search-empty', role: 'status' },
         h('p', { class: 'search-none' }, h('b', null, `Nothing matches “${q.trim()}”.`), ' Search looks in card titles, captions and cheat sheets, so try one word or a term from the book.'),
         h('div', { class: 'search-head' }, 'Or try'), tipChips(),
-        h('a', { class: 'search-map', href: '#/', onclick: (ev) => { ev.preventDefault(); openResult({ href: '#/' }); } }, icon('map'), 'Browse all chapters on the map')));
+        h('a', { class: 'search-map', href: '#/', onclick: (ev) => { ev.preventDefault(); openResult({ href: '#/' }); } }, icon('home'), 'Browse the contents')));
       return;
     }
     const n = searchResults.length;
@@ -884,14 +771,12 @@
   function focusTarget() {
     const a = document.activeElement;
     if (!a || a === document.body) return 'main';
-    if (a.closest && a.closest('.pips')) return 'strip';
     const nav = a.closest && a.closest('[data-nav]');
     if (nav) return nav.getAttribute('data-nav');
     return 'main';
   }
   function placeFocus(kind) {
-    const pick = kind === 'strip' ? main.querySelector('.pip.current')
-      : kind === 'next' ? main.querySelector('[data-nav="next"]')
+    const pick = kind === 'next' ? main.querySelector('[data-nav="next"]')
         : kind === 'back' ? main.querySelector('[data-nav="back"]:not([disabled])') : null;
     (pick || main).focus({ preventScroll: true });
   }
@@ -904,8 +789,9 @@
     labScope = null;
     labActive = null;
     const r = parse();
+    DDIA.viz.closeExpanded();
     main.textContent = '';
-    let dir = 1;
+    paintTopNav(r.labRoute ? 'lab' : r.home ? 'home' : null);
     if (r.labRoute) {
       const lab = r.lab && DDIA.lab.get(r.lab);
       if (r.lab && !lab) { location.hash = '#/lab'; return; }
@@ -935,14 +821,11 @@
     } else {
       const ch = getChapter(r.ch);
       if (!ch) { location.hash = '#/'; return; }
-      if (lastRoute && lastRoute.ch === r.ch && lastRoute.idx > r.idx) dir = -1;
-      if (lastRoute && lastRoute.ch > r.ch) dir = -1;
-      main.appendChild(renderChapter(ch, r.idx, dir));
+      main.appendChild(renderChapter(ch, r.idx));
       paintSidebar(ch.id, current.idx);
       document.title = `${current.title} · ${ch.id}. ${ch.title} — DDIA visually`;
     }
-    const sameChapter = lastRoute && !r.home && lastRoute.ch === r.ch;
-    if (!sameChapter) window.scrollTo(0, 0);
+    window.scrollTo(0, 0);
     lastRoute = r;
     paintOverall();
     if (focusKind) placeFocus(focusKind);
@@ -1083,20 +966,22 @@
           const opt = page.querySelector('.lab-predict-opts button');
           if (opt) {
             // nothing may reveal the outcome while the prediction is open
-            if ([...page.querySelectorAll('.lab-runbar .vz-btn, .lab-all .vz-btn')].some((b) => /Replay|Skip|Next|Random|Try all/.test(b.textContent) && !b.disabled)) push('a control can reveal the outcome before the prediction');
+            if ([...page.querySelectorAll('.lab-runbar .vz-btn')].some((b) => /Run|Skip|Next|Random/.test(b.textContent) && !b.disabled)) push('a control can reveal the outcome before the prediction');
+            if (page.querySelector('.lab-cell')) push('the all-runs grid shows before the prediction');
             if (page.querySelector('.lab-verdict:not(.pending)')) push('readouts show the outcome before the prediction');
             opt.click();
             await wait(500);
           }
-          for (const b of [...page.querySelectorAll('.lab-card button')]) {
+          for (const b of [...page.querySelectorAll('.lab-card button:not(.lab-cell)')]) {
             if (!b.isConnected || b.disabled) continue;
             b.click();
             await wait(220);
           }
-          const allBtn = [...page.querySelectorAll('.lab-all button')].find((b) => /Try all/.test(b.textContent));
-          if (allBtn) { allBtn.click(); await wait(300); }
+          // "Ask again" reopens the question; answer it so the outcome shows again
+          const again = page.querySelector('.lab-predict-opts button');
+          if (again) { again.click(); await wait(400); }
           const cell = page.querySelector('.lab-cell');
-          if (cell) { cell.click(); await wait(300); } else push('the all-runs grid did not open');
+          if (cell) { cell.click(); await wait(300); } else push('the all-runs grid is missing');
           for (const slot of [...page.querySelectorAll('[data-slot]')]) { slot.dispatchEvent(new MouseEvent('click', { bubbles: true })); await wait(250); }
           const chip = page.querySelector('.lab-step:not([disabled])');
           if (chip) {

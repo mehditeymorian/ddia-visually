@@ -51,3 +51,8 @@ desktop.ini
 *.swp
 *.swo
 *~
+
+# ---- Impeccable design tooling: keep the design record, drop the scratch ----
+.impeccable/*
+!.impeccable/design.json
+!.impeccable/surfaces/
