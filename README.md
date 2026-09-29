@@ -2,7 +2,7 @@
 
 An unofficial, **visual and interactive** study companion for *Designing Data-Intensive Applications* by Martin Kleppmann, covering chapters 1–11.
 
-<!-- Live site: add the GitHub Pages link here after the first deploy -->
+[DDIA-Visually Website](https://mehditeymorian.github.io/ddia-visually/)
 
 Reading 500 pages of dense text isn't for everyone. Here every idea from the book is a picture you can play with: crash a leader, race two transactions, overload a hot partition. You watch it break, then switch on the fix and watch it work.
 
