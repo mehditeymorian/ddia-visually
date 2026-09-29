@@ -32,7 +32,8 @@ The site doesn't summarize the book; it simulates it. Each card is one idea, one
 - A playground with two labs so far: Quorum (chapters 5 and 9: knobs and a replica builder) and Isolation (chapter 7: a two-transaction timeline). More labs are planned (partitioning, clocks and fencing, LSM vs B-tree, stream windows, consensus).
 - Plain HTML, CSS and JavaScript with inline SVG. No build step, no frameworks and no external libraries. Chapters are authored through `DDIA.chapter({...})` and a shared visualization kit (`js/viz.js`); labs through `DDIA.lab({...})`. Visual changes to diagrams belong in the shared kit so chapter files don't need editing.
 - Light and dark themes are both required. The site must work on phones.
-- Lab bounding rules (discrete options, at most three knobs shown per preset, predict before run) are enforced in code today. The owner has not fixed them as untouchable: how learners set up a lab is open to rework, as long as nobody gives up because the setup is complex.
+- A lab opens on a menu of scenario cards, each with a small drawing of its setup, a one-line question and the learner's status. Challenges put the goal, a pass checklist and Test together, and reveal a solution after two failed tests.
+- Lab bounding rules (discrete options, at most three knobs shown per scenario, predict before run, a prediction always asks about the setup on screen) are enforced in code today. The owner has not fixed them as untouchable: how learners set up a lab is open to rework, as long as nobody gives up because the setup is complex.
 
 ## Brand Commitments
 

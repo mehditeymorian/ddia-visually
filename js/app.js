@@ -37,6 +37,13 @@
   const KEY = 'ddia-visual-guide-v1';
   let store = { seen: {}, quiz: {}, theme: null, labs: {} };
   try { store = Object.assign(store, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { /* private mode */ }
+  // 2026-09-29: two Isolation questions now ask about the setup on screen, so answers saved for the old
+  // questions no longer apply. Newer answers carry their question (see DDIA.labnav.saved).
+  if ((store.labsVersion || 1) < 2) {
+    const iso = store.labs && store.labs.isolation;
+    if (iso && iso.p) ['dirty-read', 'lost-update'].forEach((id) => { if (iso.p[id] && iso.p[id].q == null) delete iso.p[id]; });
+    store.labsVersion = 2;
+  }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* ignore */ } }
   function markSeen(chId, idx) {
     const list = store.seen[chId] || (store.seen[chId] = []);
@@ -56,6 +63,8 @@
       const cur = labProgress(id);
       Object.assign(cur.p, (lp && lp.p) || {});
       Object.entries((lp && lp.c) || {}).forEach(([k, v]) => { if (v) cur.c[k] = v; });
+      Object.entries((lp && lp.f) || {}).forEach(([k, v]) => { cur.f[k] = Math.max(cur.f[k] || 0, Number(v) || 0); });
+      Object.entries((lp && lp.s) || {}).forEach(([k, v]) => { if (v) cur.s[k] = v; });
     });
     if ('theme' in fresh) store.theme = fresh.theme;
     if (fresh.last) store.last = fresh.last;
@@ -551,11 +560,11 @@
     (DDIA.labs || []).forEach((l, li) => {
       const add = (tab, kind, title, body, i) => searchIndex.push({
         kind, title, body, scope: l.title + ' playground', href: `#/lab/${l.id}` + (tab ? '/' + tab : ''), badge: 'lab', pc: 'var(--lab)', pcbg: 'var(--lab-bg)',
-        order: 100000 + li * 100 + i, where: tab ? `${kind === 'challenge' ? 'Challenge' : 'Preset'} · ${l.title}` : 'Playground lab',
+        order: 100000 + li * 100 + i, where: tab ? `${kind === 'challenge' ? 'Challenge' : 'Scenario'} · ${l.title}` : 'Playground lab',
       });
       add(null, 'lab', l.title, l.tagline, 0);
-      l.presets.forEach((t, i) => add(t.id, 'preset', t.title, [t.nudge, t.predict && t.predict.q].filter(Boolean).join(' · '), i + 1));
-      l.challenges.forEach((t, i) => add(t.id, 'challenge', t.title, t.goal, 50 + i));
+      l.presets.forEach((t, i) => add(t.id, 'preset', t.title, [t.blurb, t.nudge, t.predict && t.predict.q].filter(Boolean).join(' · '), i + 1));
+      l.challenges.forEach((t, i) => add(t.id, 'challenge', t.title, [t.blurb, t.goal].filter(Boolean).join(' · '), 50 + i));
     });
     searchIndex.forEach((e) => { e.nt = norm(e.title); e.nb = norm(e.body); e.nc = norm(e.scope); });
   }
@@ -721,6 +730,8 @@
     const p = all[id] || (all[id] = {});
     p.p = p.p || {};
     p.c = p.c || {};
+    p.f = p.f || {}; // failed challenge tests; two unlock "Show a solution"
+    p.s = p.s || {}; // challenges whose solution was shown
     return p;
   }
   // cards whose `lab` field points at this lab tab (the card is the single source of truth)
@@ -777,7 +788,8 @@
   }
   function placeFocus(kind) {
     const pick = kind === 'next' ? main.querySelector('[data-nav="next"]')
-        : kind === 'back' ? main.querySelector('[data-nav="back"]:not([disabled])') : null;
+        : kind === 'back' ? main.querySelector('[data-nav="back"]:not([disabled])')
+        : kind === 'strip' ? main.querySelector('.lab-strip [aria-current="page"]') : null;
     (pick || main).focus({ preventScroll: true });
   }
   function route() {
@@ -794,20 +806,27 @@
     paintTopNav(r.labRoute ? 'lab' : r.home ? 'home' : null);
     if (r.labRoute) {
       const lab = r.lab && DDIA.lab.get(r.lab);
-      if (r.lab && !lab) { location.hash = '#/lab'; return; }
+      if (r.lab && !lab) { location.replace('#/lab'); return; }
       if (!lab) {
         main.appendChild(DDIA.lab.renderHub(labEnv));
         paintSidebar(null, null, {});
         document.title = 'Playground — DDIA visually';
+      } else if (!r.tab) {
+        main.appendChild(DDIA.labnav.overview(lab, labEnv));
+        labActive = { id: lab.id, tab: null };
+        paintSidebar(null, null, labActive);
+        document.title = `${lab.title} — DDIA visually`;
       } else {
-        const tab = lab.presets.concat(lab.challenges).find((t) => t.id === r.tab) || lab.presets[0];
+        const tab = lab.presets.concat(lab.challenges).find((t) => t.id === r.tab);
+        if (!tab) { location.replace(`#/lab/${lab.id}`); return; }
         labScope = DDIA.viz.scope();
         main.appendChild(DDIA.lab.renderPage(lab, tab.id, r.query, labScope, labEnv));
         labActive = { id: lab.id, tab: tab.id };
         paintSidebar(null, null, labActive);
         document.title = `${tab.title} · ${lab.title} — DDIA visually`;
       }
-      const sameLab = lastRoute && lastRoute.labRoute && lastRoute.lab === r.lab;
+      // moving between tabs of one lab keeps the scroll; opening the lab or its overview starts at the top
+      const sameLab = lastRoute && lastRoute.labRoute && lastRoute.lab === r.lab && lastRoute.tab && r.tab;
       if (!sameLab) window.scrollTo(0, 0);
       lastRoute = r;
       paintOverall();
@@ -957,14 +976,38 @@
       for (const l of DDIA.labs) {
         where = `lab/${l.id}`;
         if (l.problems && l.problems.length) push('breaks the bounding rules: ' + l.problems.join('; '));
+        location.hash = `#/lab/${l.id}`;
+        await wait(500);
+        const ov = main.querySelector('.lab-overview');
+        if (!ov) push('the lab overview did not render');
+        else {
+          const cards = ov.querySelectorAll('.lab-scn');
+          if (cards.length !== l.presets.length + l.challenges.length) push(`the overview shows ${cards.length} cards, expected ${l.presets.length + l.challenges.length}`);
+          if (ov.querySelectorAll('.lab-sketch svg').length !== cards.length) push('a scenario card has no sketch');
+          checkOverflow(ov);
+        }
         for (const t of l.presets.concat(l.challenges)) {
           where = `lab/${l.id}/${t.id}`;
           location.hash = `#/lab/${l.id}/${t.id}`;
           await wait(700);
           const page = main.querySelector('.lab');
           if (!page) { push('lab page did not render'); continue; }
+          const cur = page.querySelectorAll('.lab-strip [aria-current="page"]');
+          if (cur.length !== 1 || !cur[0].textContent.includes(t.title)) push('the strip does not mark the current card');
+          const toggle = page.querySelector('.lab-all-toggle');
+          if (!toggle) push('no "All scenarios" button');
+          else {
+            toggle.click();
+            await wait(150);
+            if (!page.querySelector('.lab-strip-more .lab-scn')) push('"All scenarios" did not open the grid');
+            toggle.click();
+            await wait(100);
+            if (!page.querySelector('.lab-strip-more').hidden) push('"All scenarios" did not close the grid');
+          }
           const opt = page.querySelector('.lab-predict-opts button');
           if (opt) {
+            const nudge = page.querySelector('.lab-nudge');
+            if (nudge && nudge.getClientRects().length) push('the nudge shows before the prediction');
             // nothing may reveal the outcome while the prediction is open
             if ([...page.querySelectorAll('.lab-runbar .vz-btn')].some((b) => /Run|Skip|Next|Random/.test(b.textContent) && !b.disabled)) push('a control can reveal the outcome before the prediction');
             if (page.querySelector('.lab-cell')) push('the all-runs grid shows before the prediction');
@@ -994,11 +1037,46 @@
           checkOverflow(page);
           if (page.querySelector('.demo-error')) push('lab crashed: ' + page.querySelector('.demo-error').textContent);
         }
-        for (const ch of l.challenges) {
+        for (const [ci, ch] of l.challenges.entries()) {
           where = `lab/${l.id}/${ch.id}/solution`;
           const sol = DDIA.lab.configFor(l, ch.config, ch.solution.config);
           const inp = ch.solution.input != null ? ch.solution.input : ch.input != null ? ch.input : l.defaultInput(sol);
           if (!DDIA.lab.checkChallenge(l, ch, sol, inp).ok) push('the challenge solution does not pass');
+          const pr = labProgress(l.id);
+          if (pr.c[ch.id]) continue; // the control walk already passed it
+          const test = () => {
+            const b = [...main.querySelectorAll('.lab-test .vz-btn')].find((x) => /Test my design/.test(x.textContent));
+            if (b) { b.focus(); b.click(); }
+            return b;
+          };
+          if (ci === 0) {
+            // found without help: open the solution's setup by URL, test it, and it counts as passed
+            const qs = Object.entries(ch.solution.config || {}).map(([k, val]) => `${k}=${encodeURIComponent(val)}`);
+            if (ch.solution.input != null) qs.push('run=' + encodeURIComponent(l.inputKey(ch.solution.input)));
+            location.hash = `#/lab/${l.id}/${ch.id}` + (qs.length ? '?' + qs.join('&') : '');
+            await wait(700);
+            test();
+            await wait(300);
+            if (!pr.c[ch.id] || pr.s[ch.id]) push('a pass without the solution should count as "Passed"');
+            if (!main.querySelector('.lab-strip [aria-current="page"] .mk.s-passed')) push('the strip does not mark the pass');
+            continue;
+          }
+          location.hash = `#/lab/${l.id}/${ch.id}`;
+          await wait(700);
+          test(); await wait(200);
+          const focused = document.activeElement && document.activeElement.getAttribute('data-k');
+          if (focused !== 'test') push('keyboard focus leaves Test my design after a test');
+          test(); await wait(200);
+          const show = [...main.querySelectorAll('.lab-test .lab-textbtn')].find((b) => /Show a solution/.test(b.textContent));
+          if (!show) { push('"Show a solution" did not appear after two failed tests'); continue; }
+          show.click();
+          await wait(600);
+          if ([...main.querySelectorAll('.lab-test .lab-textbtn')].some((b) => /Show a solution/.test(b.textContent))) push('"Show a solution" stays while the solution is loaded');
+          test();
+          await wait(300);
+          if (!main.querySelector('.lab-check .lab-reveal.k-good')) push('the shown solution does not pass in the page');
+          if (!pr.s[ch.id] || pr.c[ch.id]) push('a shown solution should count as "Solution seen", not passed');
+          if (!main.querySelector('.lab-strip [aria-current="page"] .mk.s-seen')) push('the strip does not mark the solution as seen');
         }
       }
       where = 'card links';

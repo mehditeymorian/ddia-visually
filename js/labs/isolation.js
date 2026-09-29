@@ -10,6 +10,7 @@
   const LEVELS = ['none', 'rc', 'si', 'ssi', '2pl'];
   const RANK = { none: 0, rc: 1, si: 2, ssi: 3, '2pl': 3 };
   const LEVEL_LABEL = { none: 'No isolation', rc: 'Read committed', si: 'Snapshot', ssi: 'Serializable (SSI)', '2pl': '2PL' };
+  const SKETCH_LEVEL = { none: 'No isolation', rc: 'Read committed', si: 'Snapshot', ssi: 'Serializable', '2pl': '2PL' };
   const money = (v) => (v == null ? '—' : '$' + v);
 
   /* ---------- scenarios: two transactions of at most 5 steps each ---------- */
@@ -357,6 +358,31 @@
     styles: ['timeline', 'knobs', 'challenges'],
     // hub thumbnail: two transactions interleaving as time flows down
     thumb: '<svg viewBox="0 0 200 110"><path d="M16 12v86" stroke="var(--text-3)" stroke-width="1.6" stroke-linecap="round" fill="none"/><path d="M12 92l4 6 4-6" stroke="var(--text-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/><rect x="30" y="14" width="72" height="18" rx="6" fill="var(--k-primary-f)" stroke="var(--k-primary-s)" stroke-width="1.6"/><text x="66" y="26.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-primary-i)">T1 read</text><rect x="108" y="36" width="72" height="18" rx="6" fill="var(--k-data-f)" stroke="var(--k-data-s)" stroke-width="1.6"/><text x="144" y="48.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-data-i)">T2 read</text><rect x="30" y="58" width="72" height="18" rx="6" fill="var(--k-primary-f)" stroke="var(--k-primary-s)" stroke-width="1.6"/><text x="66" y="70.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-primary-i)">T1 write</text><rect x="108" y="80" width="72" height="18" rx="6" fill="var(--k-data-f)" stroke="var(--k-data-s)" stroke-width="1.6"/><text x="144" y="92.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-data-i)">T2 write</text><rect x="108" y="100" width="72" height="0" /></svg>',
+    // scenario card drawing: both transactions' steps in the tab's opening order, then the level (setup only)
+    sketch(cfg, input) {
+      const sc = SCENARIOS[cfg.scenario];
+      const order = Array.isArray(input) && parseInput(input.join(''), cfg) ? input : sc.order;
+      const slot = Math.min(40, 216 / order.length);
+      const x0 = 120 - (slot * order.length) / 2;
+      const next = [0, 0];
+      const marks = order.map((tx, k) => {
+        const st = sc.txs[tx - 1][next[tx - 1]++];
+        const kind = tx === 1 ? 'primary' : 'data';
+        const cx = x0 + slot * k + slot / 2;
+        const cy = tx === 1 ? 18 : 44;
+        if (st.do === 'end') {
+          const abort = tx === 1 && cfg.t1end === 'abort';
+          const glyph = abort ? `M${cx - 3.5} ${cy - 3.5}l7 7M${cx + 3.5} ${cy - 3.5}l-7 7` : `M${cx - 4} ${cy}l3 3 5-6`;
+          return `<circle cx="${cx}" cy="${cy}" r="8" fill="var(--k-${kind}-f)" stroke="var(--k-${kind}-s)" stroke-width="1.6"/>` +
+            `<path d="${glyph}" stroke="var(--k-${abort ? 'bad' : kind}-i)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
+        }
+        const pw = slot - 8;
+        const solid = st.do === 'write' || st.do === 'update';
+        return `<rect x="${cx - pw / 2}" y="${cy - 8}" width="${pw}" height="16" rx="8" fill="var(--k-${kind}-${solid ? 's' : 'f'})" stroke="var(--k-${kind}-s)" stroke-width="1.6"${st.do === 'count' ? ' stroke-dasharray="3 2.5"' : ''}/>`;
+      }).join('');
+      const label = SKETCH_LEVEL[cfg.iso] + (cfg.lock === 'rows' ? ' + row locks' : '');
+      return `<svg viewBox="0 0 240 84">${marks}<text x="120" y="78" text-anchor="middle" font-size="15" font-weight="600" fill="var(--text-2)" style="font-family:var(--font-body)">${label}</text></svg>`;
+    },
     knobs: [
       { id: 'iso', label: 'Isolation level', options: LEVELS.map((l) => ({ value: l, label: LEVEL_LABEL[l] })) },
       { id: 'lock', label: 'Lock rows I read', options: [{ value: 'off', label: 'Off' }, { value: 'rows', label: 'FOR UPDATE' }] },
@@ -399,53 +425,61 @@
     presets: [
       {
         id: 'dirty-read', title: 'Dirty read',
+        blurb: 'T1 rolls back. Can the buyer see its price?',
         config: { scenario: 'dirty-read', iso: 'none', t1end: 'abort' }, knobs: ['iso', 't1end'],
         nudge: 'Switch to read committed, then replay.',
-        predict: { q: 'Read committed: can the buyer still see the $90 price that was rolled back?', metric: 'anomaly', config: { iso: 'rc' } },
+        predict: { q: 'No isolation: can the buyer see the $90 price that was rolled back?', metric: 'anomaly' },
       },
       {
         id: 'dirty-write', title: 'Dirty write',
+        blurb: 'Two buyers write at once. Who gets the seat?',
         config: { scenario: 'dirty-write', iso: 'none' }, knobs: ['iso'],
         nudge: 'Try read committed: the second buyer has to wait.',
         predict: { q: 'No isolation: can the seat and the invoice go to different buyers?', metric: 'anomaly' },
       },
       {
         id: 'read-skew', title: 'Read skew',
+        blurb: 'An audit reads mid-transfer. Can money appear?',
         config: { scenario: 'read-skew', iso: 'rc' }, knobs: ['iso'],
         nudge: 'Switch to snapshot isolation and replay the audit.',
         predict: { q: 'Read committed: can the audit see money appear from nowhere?', metric: 'anomaly' },
       },
       {
         id: 'lost-update', title: 'Lost update',
+        blurb: 'Two likes at once. Does one disappear?',
         config: { scenario: 'lost-update', iso: 'rc' }, knobs: ['iso', 'lock'],
         nudge: 'Try snapshot, 2PL, or locking the row you read.',
-        predict: { q: 'Snapshot isolation: will any order still lose a like?', metric: 'anomaly', config: { iso: 'si' } },
+        predict: { q: 'Read committed: can two likes at once lose one?', metric: 'anomaly' },
       },
       {
         id: 'write-skew', title: 'Write skew',
+        blurb: 'Two doctors check the roster. Can both leave?',
         config: { scenario: 'write-skew', iso: 'si' }, knobs: ['iso', 'lock'],
         nudge: 'Snapshot lets both doctors leave. Try serializable.',
         predict: { q: 'Snapshot isolation: can both doctors go off call?', metric: 'anomaly' },
       },
       {
         id: 'phantom', title: 'Phantom',
-        config: { scenario: 'phantom', iso: 'si' }, knobs: ['iso', 'lock'],
-        nudge: 'Locking rows cannot help here: the row does not exist yet.',
-        predict: { q: 'Snapshot plus locking the rows you read: can room 12 still be booked twice?', metric: 'anomaly', config: { lock: 'rows' } },
+        blurb: 'Two bookings check an empty room. Double booked?',
+        config: { scenario: 'phantom', iso: 'si', lock: 'rows' }, knobs: ['iso', 'lock'],
+        nudge: 'Row locks can’t lock a row that doesn’t exist yet. Try 2PL.',
+        predict: { q: 'Snapshot plus locking the rows you read: can room 12 still be booked twice?', metric: 'anomaly' },
       },
     ],
 
     challenges: [
       {
         id: 'break-si', title: 'Break snapshot isolation',
+        blurb: 'Reorder steps until both doctors leave under snapshot.',
         goal: 'Snapshot isolation is on. Reorder the steps until both doctors go off call.',
         config: { scenario: 'write-skew', iso: 'si' }, knobs: [], input: [1, 1, 1, 2, 2, 2], order: true,
         criteria: [{ label: 'Both doctors leave, nobody is on call', metric: 'anomaly', min: 1, scope: 'current' }],
         hint: 'Each doctor must count before the other one commits.',
-        solution: { input: [1, 2, 1, 2, 1, 2] },
+        solution: { input: [1, 2, 1, 2, 1, 2], why: 'Both count before either commits, so each still sees two on call.' },
       },
       {
         id: 'weakest-safe', title: 'Weakest safe level',
+        blurb: 'Find the weakest level that never loses a like.',
         goal: 'Two people like a post at once. Pick the weakest level that never loses a like, in any order.',
         config: { scenario: 'lost-update', iso: 'none' }, knobs: ['iso'],
         criteria: [
@@ -461,10 +495,11 @@
           },
         ],
         hint: 'Aborting the second writer counts as safe: the app can retry it.',
-        solution: { config: { iso: 'si' } },
+        solution: { config: { iso: 'si' }, why: 'Snapshot aborts the second writer; read committed lets it overwrite the first.' },
       },
       {
         id: 'fewest-aborts', title: 'On call, fewest aborts',
+        blurb: 'Keep a doctor on call with the fewest aborts.',
         goal: 'Keep a doctor on call in every order, and abort as few transactions as possible.',
         config: { scenario: 'write-skew', iso: 'si' }, knobs: ['iso', 'lock'],
         criteria: [
@@ -488,7 +523,7 @@
           },
         ],
         hint: 'Aborts come from spotting conflicts late. What if the second doctor waited instead?',
-        solution: { config: { iso: 'rc', lock: 'rows' } },
+        solution: { config: { iso: 'rc', lock: 'rows' }, why: 'Locking the rows you read makes the second doctor wait instead of abort.' },
       },
     ],
 

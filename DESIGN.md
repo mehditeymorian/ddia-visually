@@ -236,15 +236,19 @@ components:
     rounded: "{rounded.pill}"
     padding: "0 40px 0 38px"
     height: "38px"
-  lab-tab:
+  lab-chip:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.text-2}"
     rounded: "{rounded.pill}"
     padding: "0 14px"
     height: "34px"
-  lab-tab-current:
+  lab-chip-current:
     backgroundColor: "{colors.accent-bg}"
     textColor: "{colors.link}"
+  lab-scenario-card:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.lg}"
+    padding: "12px 16px 14px"
   lab-panel:
     backgroundColor: "{colors.surface}"
     rounded: "{rounded.lg}"
@@ -282,7 +286,7 @@ components:
 
 Every screen is a calm, well-made documentation page whose example is alive. The page itself is quiet: a white sheet (cool charcoal at night), the platform's own UI type, hairline borders and one link blue. All the colour and motion the site has is spent inside the diagram, which sits in a rounded sandbox frame the way a code sandbox sits in a docs article. The bar is react.dev: structured, generous, legible, with the interactive example inline rather than in a separate app.
 
-Density is moderate and reading-first. A sticky 56px top bar and a 272px contents sidebar frame a single 900px column; labs widen to 1180px and put a sticky panel (Predict, Setup, Result, Test your design, All runs) beside the model. Headings are heavy and tightly tracked; everything else is set at ordinary docs sizes in three greys. The page never decorates itself: no textures, no metaphor chrome, no ornamental colour. Controls are pills, frames are 16px-rounded boxes, and state is carried by a mark plus a word.
+Density is moderate and reading-first. A sticky 56px top bar and a 272px contents sidebar frame a single 900px column; labs widen to 1180px and put a sticky panel (Predict, or a challenge's goal and checklist; Setup; Result; All runs) beside the model, under a strip of scenario cards. Headings are heavy and tightly tracked; everything else is set at ordinary docs sizes in three greys. The page never decorates itself: no textures, no metaphor chrome, no ornamental colour. Controls are pills, frames are 16px-rounded boxes, and state is carried by a mark plus a word.
 
 The built hero H1 runs 38 to 52px (the direction contract planned 44 to 48px); the build is recorded here.
 
@@ -300,7 +304,7 @@ A near-colourless docs shell with a single blue voice, and a separate, evenly sa
 
 ### Primary
 - **Link Blue** (link; brightened to link-dark at night): links, the current item in navigation, the focus ring, text caret, progress fills, and the fill of the one primary action per view. Hover deepens to Link Blue Hover (link-hover / link-hover-dark).
-- **Blue Wash** (accent-bg / accent-bg-dark): the tint behind the current sidebar row, the current top link, the current lab tab, the selected search result, the note callout and the lab goal strip. It is how "you are here" reads without a filled block.
+- **Blue Wash** (accent-bg / accent-bg-dark): the tint behind the current sidebar row, the current top link, the current scenario in a lab's strip, the selected search result, the note callout and the lab goal strip. It is how "you are here" reads without a filled block.
 - **On Blue** (on-accent / on-accent-dark): text and icons on a filled blue control. White by day, near-black navy at night because the night blue is light.
 
 ### Neutral
@@ -346,7 +350,7 @@ Eight semantic kinds, each a trio of fill (-f), stroke (-s) and ink (-i), redefi
 
 ## Layout
 
-A docs shell: sticky 56px translucent top bar (88% page colour with backdrop blur, hairline below), a 272px sticky sidebar with its own scroll, and a main column padded 40px by 48px that centres a 900px page. Labs widen to 1180px with a two-column grid (model, then a 380px panel; 340px below 1180px) and a 28px gap; below 1040px the panel dissolves into the flow so Predict comes first, then the model, then the other sections.
+A docs shell: sticky 56px translucent top bar (88% page colour with backdrop blur, hairline below), a 272px sticky sidebar with its own scroll, and a main column padded 40px by 48px that centres a 900px page. Labs widen to 1180px with a two-column grid (model, then a 380px panel; 340px below 1180px) and a 28px gap; below 1040px the panel dissolves into the flow so Predict (or a challenge's goal and checklist) comes first, then the model, then the other sections.
 
 Spacing runs on a 4px base with 8, 12, 16, 20, 24 and 28px steps inside components and 48 to 64px between major blocks (pager, home sections, footer). Reading measure is capped at 54 to 76ch.
 
@@ -403,10 +407,10 @@ Rounded 16px tinted boxes with a 20px icon and no stripe. Neutral callouts use W
 - **Contents rows:** a 36px number badge (green fill when done), name, tagline and meta, separated by hairlines; hover fills Wash and turns the name blue.
 
 ### Lab Panel (signature)
-A sticky 16px-framed panel of sections separated by hairlines, each with a 14px bold title and a small Ink 3 note. Predict offers pill options that turn blue on hover and resolve into a good or bad reveal box. Setup shows at most a few knobs as segmented controls or pill slots with kind dots, and lists held values below a dashed hairline, each with a "Change" text button. Result opens with a verdict pill (kind fill, a 7px currentColor dot and a word) over label/value stat rows with tabular numbers. Test your design lists criteria with round check or cross marks plus a sentence of why. All runs is a 20-column grid of small squares (10 on phones) with a legend of counts, bad and warn at full strength, good faded.
+A sticky 16px-framed panel of sections separated by hairlines, each with a 14px bold title and a small Ink 3 note. Predict offers pill options that turn blue on hover and resolve into a good or bad reveal box. Setup shows at most a few knobs as segmented controls or pill slots with kind dots, and lists held values below a dashed hairline, each with a "Change" text button. Result opens with a verdict pill (kind fill, a 7px currentColor dot and a word) over label/value stat rows with tabular numbers. A challenge's panel reads Challenge n of m (the goal on Blue Wash, then a To pass checklist whose empty rings turn into round check or cross marks with a sentence of why and a "Show one" text button), then Your setup (knobs, a dashed-hairline "Fixed:" line, Test my design as the view's one filled blue, a "1 of 2 met" summary, Hint, and "Show a solution" after two failed tests). All runs is a 20-column grid of small squares (10 on phones) with a legend of counts, bad and warn at full strength, good faded.
 
-### Lab Tabs
-Rows of 34px pills with hairline edges and Ink 2 text, labelled by a small row name. The current tab sits on the Blue Wash in Link Blue, like every other "you are here" marker, so Run stays the only filled blue on the page; completed ones carry a green check or a small grey dot. On phones each row scrolls sideways.
+### Scenario Cards and Strip
+A lab opens on an overview of scenario cards, then challenge cards. Each card is a 16px hairline frame. At the top is a Wash band holding the lab's small setup sketch (diagram kinds, one short label: mono when it is data like "w=2 r=2", the body face when it is a name like "Snapshot"). Below it come a 16px semibold title (challenges lead with a star), a 14px Ink 2 blurb and a status pill with a 6px dot: good for "Predicted right" and "Passed", bad for "Missed", warn for "Solution seen", and Fill 2 with Ink 3 for everything else. Hover gives a blue edge and the Frame shadow, like lab tiles. Inside a scenario, the cards shrink to a strip of 34px hairline pills with a small drawn status mark. The current pill sits on Blue Wash in Link Blue, a hairline divider comes before the challenges, and "All scenarios" is a blue text pill that opens the same grid in place inside a Wash frame. On wide screens the strip wraps so every card stays in sight; on phones it scrolls sideways and fades its edges while there is more to see. Each pill's tooltip names its status.
 
 ### Quiz Panel
 A Wash, 16px-framed panel: a row of 26 by 4px progress bars (blue current, green right, red wrong), a 20px semibold question, full-width 12px-rounded options with a letter badge. Answers resolve to good or bad fills with a filled letter badge and a tinted explanation. The score is an 800-weight 34px total coloured by outcome.
@@ -430,7 +434,7 @@ Nodes, links, packets, boxes, cells, tapes, logs, bars, tables, stats and steppe
 
 ### Don't:
 - **Don't** use Link Blue as decoration, a section colour or a highlight for non-interactive text.
-- **Don't** add metaphor chrome to the shell: no drawn map, no numbered chapter pips, no tile-grid navigation. Progress ticks and run grids that report the model's own data are fine.
+- **Don't** add metaphor chrome to the shell: no drawn map, no numbered chapter pips, no tile-grid navigation in the shell (a lab's scenario cards are content, not chrome). Progress ticks and run grids that report the model's own data are fine.
 - **Don't** put coloured side stripes on callouts, cards or list rows.
 - **Don't** add a second typeface, a webfont, or uppercase tracked labels above headings.
 - **Don't** use the diagram kinds to colour shell chrome (top bar, sidebar, headings, cards).

@@ -12,7 +12,7 @@ globalThis.window = globalThis;
 const loadErrors = [];
 const origError = console.error;
 console.error = (...a) => { loadErrors.push(a.map(String).join(' ')); };
-for (const f of ['js/sim.js', 'js/lab.js', 'js/labs/quorum.js', 'js/labs/isolation.js']) {
+for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js']) {
   try { vm.runInThisContext(readFileSync(join(root, f), 'utf8'), { filename: f }); } catch (e) { loadErrors.push(`${f}: ${e.message}`); }
 }
 console.error = origError;
@@ -75,7 +75,8 @@ const miniLab = (over) => Object.assign({
   defaults: { a: 1 }, run: (cfg, input) => ({ trace: [], stats: { bad: cfg.a === 2 && input > 1 ? 1 : 0 } }),
   defaultInput: () => 1, samples: () => [1, 2, 3], inputKey: String, parseInput: Number, inputLabel: String, sampleNoun: ['run', 'runs'],
   metrics: [{ id: 'bad', label: 'Bad', kind: 'bad' }], classify: () => ({ kind: 'good', label: 'ok' }), view: () => ({ render() {} }),
-  presets: [{ id: 'p', title: 'P', config: {}, knobs: ['a'], nudge: 'Try it.', predict: { q: 'Bad?', metric: 'bad' } }],
+  sketch: () => '<svg viewBox="0 0 10 10"></svg>',
+  presets: [{ id: 'p', title: 'P', blurb: 'Is it bad?', config: {}, knobs: ['a'], nudge: 'Try it.', predict: { q: 'Bad?', metric: 'bad' } }],
 }, over);
 
 test('validate enforces the bounding rules', () => {
@@ -317,7 +318,7 @@ test('every predict is computable and every preset input is valid', () => {
     const input = p.input != null ? p.input : l.defaultInput(c);
     assert.ok(l.parseInput(l.inputKey(input), c) != null, `${l.id}/${p.id} input round-trips`);
     if (!p.predict) return;
-    const r = DDIA.lab.predict(l, DDIA.lab.configFor(l, p.config, p.predict.config), p.predict.metric);
+    const r = DDIA.lab.predict(l, DDIA.lab.configFor(l, p.config), p.predict.metric);
     assert.ok([0, 1, 2].includes(r.answer), `${l.id}/${p.id}`);
   }));
 });
@@ -350,6 +351,76 @@ test('every card lab link points at a real lab and preset', () => {
       assert.ok(knob && knob.options.some((o) => String(o.value) === String(val)), `${where}: bad override ${k}=${val}`);
     });
   });
+});
+
+/* ---------- scenario cards ---------- */
+test('labnav.status covers every card state, old progress included', () => {
+  const l = DDIA.lab.get('quorum');
+  const pre = l.presets.find((p) => p.id === 'stale-read');
+  const free = l.presets.find((p) => !p.predict);
+  const ch = l.challenges[0];
+  const st = (tab, prog) => DDIA.labnav.status(l, tab, prog).kind;
+  assert.equal(st(pre, {}), 'new');
+  assert.equal(st(pre, { p: { 'stale-read': { a: 2, ok: true } } }), 'right');
+  assert.equal(st(pre, { p: { 'stale-read': { a: 0, ok: false } } }), 'missed');
+  assert.equal(st(pre, { p: { 'stale-read': { a: -1 } } }), 'ran');
+  assert.equal(st(free, { p: {} }), 'sandbox');
+  assert.equal(st(ch, { p: {}, c: {} }), 'open', 'progress saved before f and s existed');
+  assert.equal(st(ch, { c: { [ch.id]: 1 } }), 'passed');
+  assert.equal(st(ch, { s: { [ch.id]: true } }), 'seen');
+  assert.equal(st(ch, { c: { [ch.id]: 1 }, s: { [ch.id]: true } }), 'passed', 'passed before seeing the solution');
+  assert.equal(st(Object.assign({ kind: 'challenge' }, ch), undefined), 'open', 'a copied tab still counts as a challenge');
+  assert.equal(st(pre, { p: { 'stale-read': { a: 2, ok: true, q: pre.predict.q } } }), 'right', 'stamped with this question');
+  assert.equal(st(pre, { p: { 'stale-read': { a: 2, ok: true, q: 'an older question' } } }), 'new', 'an answer to a rewritten question no longer counts');
+});
+
+test('sketches draw every tab from its opening setup alone', () => {
+  DDIA.labs.forEach((l) => l.presets.concat(l.challenges).forEach((t) => {
+    const [run, simRun] = [l.run, DDIA.sim.run];
+    l.run = DDIA.sim.run = () => { throw new Error('a sketch must not run the model'); };
+    try {
+      const svg = DDIA.labnav.sketchOf(l, t);
+      assert.match(svg, /^<svg[\s>]/, `${l.id}/${t.id}`);
+      assert.equal(DDIA.labnav.sketchOf(l, t), svg, `${l.id}/${t.id} is deterministic`);
+      assert.ok((svg.match(/<text/g) || []).length <= 1, `${l.id}/${t.id}: at most one label`);
+      (svg.match(/font-size="([\d.]+)"/g) || []).forEach((m) => assert.ok(parseFloat(m.split('"')[1]) >= 14, `${l.id}/${t.id}: ${m}`));
+    } finally { l.run = run; DDIA.sim.run = simRun; }
+  }));
+});
+
+test('a challenge card draws its opening order, not its answer', () => {
+  const l = DDIA.lab.get('isolation');
+  const ch = l.challenges.find((c) => c.id === 'break-si');
+  const cfg = DDIA.lab.configFor(l, ch.config);
+  assert.notEqual(DDIA.labnav.sketchOf(l, ch), l.sketch(cfg, ch.solution.input));
+  assert.equal(DDIA.labnav.sketchOf(l, ch), l.sketch(cfg, ch.input));
+});
+
+test('predictions ask about the setup on screen', () => {
+  const ask = (lab, id) => {
+    const l = DDIA.lab.get(lab);
+    const p = l.presets.find((x) => x.id === id);
+    assert.equal(p.predict.config, undefined, `${lab}/${id} still has predict.config`);
+    const r = DDIA.lab.predict(l, DDIA.lab.configFor(l, p.config), p.predict.metric);
+    return [r.answer, r.hits, r.total];
+  };
+  assert.deepEqual(ask('quorum', 'read-repair'), [1, 24, 100], 'repair after the reply still leaves some stale reads');
+  assert.deepEqual(ask('isolation', 'dirty-read'), [1, 2, 6]);
+  assert.deepEqual(ask('isolation', 'lost-update'), [1, 18, 20]);
+  assert.deepEqual(ask('isolation', 'phantom'), [1, 12, 20], 'row locks cannot lock a row that does not exist');
+});
+
+test('validation asks for sketches, blurbs and solution reasons, and rejects predict.config', () => {
+  const q = DDIA.lab.get('quorum');
+  const withFirst = (key, patch) => Object.assign({}, q, { [key]: [Object.assign({}, q[key][0], patch)].concat(q[key].slice(1)) });
+  const probs = (d) => DDIA.lab.validate(d).join('; ');
+  assert.match(probs(Object.assign({}, q, { sketch: undefined })), /missing sketch/);
+  assert.match(probs(withFirst('presets', { blurb: '' })), /preset basics: missing blurb/);
+  assert.match(probs(withFirst('presets', { blurb: 'one two three four five six seven eight nine ten eleven twelve thirteen' })), /preset basics: blurb has 13 words/);
+  assert.match(probs(withFirst('presets', { predict: { q: 'Stale?', metric: 'stale', config: { w: 1 } } })), /preset basics: predict\.config/);
+  assert.match(probs(withFirst('challenges', { blurb: undefined })), /challenge missed-writes: missing blurb/);
+  assert.match(probs(withFirst('challenges', { solution: { config: { w: 2, r: 2 } } })), /challenge missed-writes: missing solution\.why/);
+  assert.match(probs(withFirst('challenges', { solution: { config: { w: 2, r: 2 }, why: Array(21).fill('w').join(' ') } })), /solution\.why has 21 words/);
 });
 
 /* ---------- report ---------- */
