@@ -185,6 +185,24 @@
     styles: ['knobs', 'builder', 'challenges'],
     // hub thumbnail: a write quorum and a read quorum that overlap on at least one replica
     thumb: '<svg viewBox="0 0 200 110"><path d="M22 58 L40 34" stroke="var(--k-primary-s)" stroke-width="1.6" stroke-dasharray="4 3" fill="none"/><path d="M22 58 L88 22" stroke="var(--k-primary-s)" stroke-width="1.6" stroke-dasharray="4 3" fill="none"/><path d="M22 58 L52 84" stroke="var(--k-primary-s)" stroke-width="1.6" stroke-dasharray="4 3" fill="none"/><path d="M178 58 L112 22" stroke="var(--k-data-s)" stroke-width="1.6" stroke-dasharray="4 3" fill="none"/><path d="M178 58 L160 34" stroke="var(--k-data-s)" stroke-width="1.6" stroke-dasharray="4 3" fill="none"/><path d="M178 58 L76 84" stroke="var(--k-data-s)" stroke-width="1.6" stroke-dasharray="4 3" fill="none"/><g transform="translate(52,34)"><path d="M-13 -9v18c0 2.8 5.8 5 13 5s13-2.2 13-5v-18" fill="var(--k-good-f)" stroke="var(--k-good-s)" stroke-width="1.8"/><ellipse cy="-9" rx="13" ry="5" fill="var(--k-good-f)" stroke="var(--k-good-s)" stroke-width="1.8"/></g><g transform="translate(100,22)"><path d="M-13 -9v18c0 2.8 5.8 5 13 5s13-2.2 13-5v-18" fill="var(--k-good-f)" stroke="var(--k-good-s)" stroke-width="1.8"/><ellipse cy="-9" rx="13" ry="5" fill="var(--k-good-f)" stroke="var(--k-good-s)" stroke-width="1.8"/></g><g transform="translate(148,34)"><path d="M-13 -9v18c0 2.8 5.8 5 13 5s13-2.2 13-5v-18" fill="var(--k-primary-f)" stroke="var(--k-primary-s)" stroke-width="1.8"/><ellipse cy="-9" rx="13" ry="5" fill="var(--k-primary-f)" stroke="var(--k-primary-s)" stroke-width="1.8"/></g><g transform="translate(64,84)"><path d="M-13 -9v18c0 2.8 5.8 5 13 5s13-2.2 13-5v-18" fill="var(--k-data-f)" stroke="var(--k-data-s)" stroke-width="1.8"/><ellipse cy="-9" rx="13" ry="5" fill="var(--k-data-f)" stroke="var(--k-data-s)" stroke-width="1.8"/></g><g transform="translate(136,84)"><path d="M-13 -9v18c0 2.8 5.8 5 13 5s13-2.2 13-5v-18" fill="var(--k-ghost-f)" stroke="var(--k-ghost-s)" stroke-width="1.8"/><ellipse cy="-9" rx="13" ry="5" fill="var(--k-ghost-f)" stroke="var(--k-ghost-s)" stroke-width="1.8"/></g><circle cx="16" cy="58" r="10" fill="var(--k-primary-f)" stroke="var(--k-primary-s)" stroke-width="1.8"/><text x="16" y="62" text-anchor="middle" font-size="11" font-weight="700" fill="var(--k-primary-i)">w</text><circle cx="184" cy="58" r="10" fill="var(--k-data-f)" stroke="var(--k-data-s)" stroke-width="1.8"/><text x="184" y="62" text-anchor="middle" font-size="11" font-weight="700" fill="var(--k-data-i)">r</text></svg>',
+    // scenario card drawing: the replicas as the scenario starts, the network, then w and r (setup only, never the outcome)
+    sketch(cfg) {
+      const KIND = { up: 'good', lag: 'warn', rec: 'info', down: 'bad' };
+      const gap = cfg.n === 5 ? 40 : 52;
+      const x0 = 120 - ((cfg.n - 1) * gap) / 2;
+      const cyl = cfg.slots.map((s, i) => {
+        const k = KIND[s] || 'neutral';
+        const paint = `fill="var(--k-${k}-f)" stroke="var(--k-${k}-s)" stroke-width="1.8"` + (s === 'rec' || s === 'down' ? ' stroke-dasharray="4 3"' : '');
+        const cross = s === 'down' ? '<path d="M-6 -1l12 12M6 -1l-12 12" stroke="var(--k-bad-s)" stroke-width="2" stroke-linecap="round"/>' : '';
+        return `<g transform="translate(${x0 + i * gap},26)"><path d="M-14 -10v20c0 3 6.3 5.5 14 5.5s14-2.5 14-5.5v-20" ${paint}/><ellipse cy="-10" rx="14" ry="5.5" ${paint}/>${cross}</g>`;
+      }).join('');
+      const a = x0 - 24, b = 240 - a;
+      let d = `M${a} 52`;
+      if (cfg.net === 'jittery') for (let x = a; x < b; x += 8) d += ' l4 -3 l4 3';
+      else d += ` H${b}`;
+      return `<svg viewBox="0 0 240 84">${cyl}<path d="${d}" stroke="var(--text-3)" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` +
+        `<text x="120" y="78" text-anchor="middle" font-size="15" font-weight="600" fill="var(--text-2)">w=${cfg.w} r=${cfg.r}</text></svg>`;
+    },
     knobs: [
       { id: 'n', label: 'Replicas n', options: [num(3), num(5)] },
       { id: 'w', label: 'Write quorum w', options: [1, 2, 3, 4, 5].map(num) },
@@ -243,36 +261,42 @@
     presets: [
       {
         id: 'basics', title: 'Quorum basics',
+        blurb: 'A replica rejoins with old data. Is any read stale?',
         config: { n: 3, w: 2, r: 2, slots: ['up', 'up', 'rec'] }, knobs: ['w', 'r'],
         nudge: 'Replica 3 missed every write. Now drop r to 1.',
         predict: { q: 'w = 2, r = 2, and replica 3 rejoins with old data. Will any read be stale?', metric: 'stale' },
       },
       {
         id: 'stale-read', title: 'Lagging replica',
+        blurb: 'One replica applies writes late. Will reads be stale?',
         config: { n: 3, w: 1, r: 1, slots: ['up', 'up', 'lag'] }, knobs: ['w', 'r', 'net'],
         nudge: 'Raise w or r until the stale reads stop.',
         predict: { q: 'w = 1, r = 1, and replica 3 applies writes late. Will reads be stale?', metric: 'stale' },
       },
       {
         id: 'read-repair', title: 'Read repair',
-        config: { n: 3, w: 1, r: 1, slots: ['up', 'up', 'rec'], repair: 'off' }, knobs: ['repair', 'r'],
-        nudge: 'Switch read repair on and watch replica 3 heal.',
-        predict: { q: 'With read repair, a read that spots old data fixes that replica. Can reads still be stale?', metric: 'stale', config: { repair: 'async' } },
+        blurb: 'Reads fix old replicas. Can a read still be stale?',
+        config: { n: 3, w: 1, r: 1, slots: ['up', 'up', 'rec'], repair: 'async' }, knobs: ['repair', 'r'],
+        nudge: 'Switch read repair off and compare the stale count.',
+        predict: { q: 'With read repair, a read that spots old data fixes that replica. Can reads still be stale?', metric: 'stale' },
       },
       {
         id: 'back-in-time', title: 'Back in time',
+        blurb: 'Jittery network, w + r > n. Can reads go backwards?',
         config: { n: 3, w: 2, r: 2, net: 'jittery' }, knobs: ['repair', 'net'], input: 46, // a run where it happens
         nudge: 'Set read repair to "Before reply", then replay.',
         predict: { q: 'w + r > n on a jittery network. Can a read return older data than the read before it?', metric: 'backInTime' },
       },
       {
         id: 'availability', title: 'Availability',
+        blurb: 'Two of five replicas are down. Does anything fail?',
         config: { n: 5, w: 3, r: 3, slots: ['up', 'up', 'up', 'down', 'down'] }, knobs: ['w', 'r'],
         nudge: 'Click a third replica until it is down.',
         predict: { q: 'Two of five replicas are down, w = 3, r = 3. Will any write or read fail?', metric: 'failed' },
       },
       {
         id: 'free-play', title: 'Free play',
+        blurb: 'Everything unlocked. Break replicas and tune quorums.',
         config: { n: 5, w: 3, r: 3 }, knobs: ['n', 'w', 'r'],
         nudge: 'Everything is unlocked. Click replicas to break them.',
       },
@@ -281,6 +305,7 @@
     challenges: [
       {
         id: 'missed-writes', title: 'Missed writes, zero stale',
+        blurb: 'A replica misses writes. Serve zero stale reads.',
         goal: 'Replica 3 misses the first writes, then rejoins. Serve no stale reads and fail nothing.',
         config: { n: 3, w: 1, r: 1, net: 'jittery', slots: ['up', 'up', 'rec'] }, knobs: ['w', 'r', 'repair'], runs: 1000,
         criteria: [
@@ -288,10 +313,11 @@
           { label: 'No failed writes or reads', metric: 'failed', max: 0 },
         ],
         hint: 'Read quorums must overlap write quorums, but only two replicas are up at first.',
-        solution: { config: { w: 2, r: 2 } },
+        solution: { config: { w: 2, r: 2 }, why: 'w + r > n, so every read quorum overlaps the latest write quorum.' },
       },
       {
         id: 'never-back', title: 'Never back in time',
+        blurb: 'No stale reads, and no read older than the last.',
         goal: 'On a jittery network, no read may be stale or older than the read before it, and nothing may fail.',
         config: { n: 3, w: 1, r: 1, net: 'jittery' }, knobs: ['w', 'r', 'repair'], runs: 1000,
         criteria: [
@@ -300,10 +326,11 @@
           { label: 'No failed writes or reads', metric: 'failed', max: 0 },
         ],
         hint: 'Overlap is not enough: a reader must spread what it saw before it replies.',
-        solution: { config: { w: 2, r: 2, repair: 'sync' } },
+        solution: { config: { w: 2, r: 2, repair: 'sync' }, why: 'Overlap stops stale reads; repairing before the reply stops reads going backwards.' },
       },
       {
         id: 'two-rejoin', title: 'Two replicas rejoin late',
+        blurb: 'Two of five rejoin late. Stay available, never stale.',
         goal: 'Five replicas; two are down until 1 s, then rejoin with old data. Stay available and never serve stale data.',
         config: { n: 5, w: 1, r: 1, net: 'jittery', slots: ['up', 'up', 'up', 'rec', 'rec'] }, knobs: ['w', 'r'], runs: 1000,
         criteria: [
@@ -311,7 +338,7 @@
           { label: 'No stale reads', metric: 'stale', max: 0 },
         ],
         hint: 'Before 1 s only three replicas answer. After that, every read must meet every write.',
-        solution: { config: { w: 3, r: 3 } },
+        solution: { config: { w: 3, r: 3 }, why: 'Three live replicas still meet w = 3 and r = 3, and 3 + 3 > 5 overlaps.' },
       },
     ],
 

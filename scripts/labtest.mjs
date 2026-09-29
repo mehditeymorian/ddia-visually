@@ -317,7 +317,7 @@ test('every predict is computable and every preset input is valid', () => {
     const input = p.input != null ? p.input : l.defaultInput(c);
     assert.ok(l.parseInput(l.inputKey(input), c) != null, `${l.id}/${p.id} input round-trips`);
     if (!p.predict) return;
-    const r = DDIA.lab.predict(l, DDIA.lab.configFor(l, p.config, p.predict.config), p.predict.metric);
+    const r = DDIA.lab.predict(l, DDIA.lab.configFor(l, p.config), p.predict.metric);
     assert.ok([0, 1, 2].includes(r.answer), `${l.id}/${p.id}`);
   }));
 });
@@ -369,6 +369,34 @@ test('labnav.status covers every card state, old progress included', () => {
   assert.equal(st(ch, { s: { [ch.id]: true } }), 'seen');
   assert.equal(st(ch, { c: { [ch.id]: 1 }, s: { [ch.id]: true } }), 'passed', 'passed before seeing the solution');
   assert.equal(st(Object.assign({ kind: 'challenge' }, ch), undefined), 'open', 'a copied tab still counts as a challenge');
+});
+
+test('sketches draw every tab from its config alone', () => {
+  DDIA.labs.forEach((l) => l.presets.concat(l.challenges).forEach((t) => {
+    const cfg = DDIA.lab.configFor(l, t.config);
+    const run = l.run;
+    l.run = () => { throw new Error('a sketch must not run the model'); };
+    try {
+      const svg = l.sketch(cfg);
+      assert.match(svg, /^<svg[\s>]/, `${l.id}/${t.id}`);
+      assert.equal(l.sketch(DDIA.lab.configFor(l, t.config)), svg, `${l.id}/${t.id} is deterministic`);
+      assert.ok((svg.match(/<text/g) || []).length <= 1, `${l.id}/${t.id}: at most one label`);
+      (svg.match(/font-size="([\d.]+)"/g) || []).forEach((m) => assert.ok(parseFloat(m.split('"')[1]) >= 14, `${l.id}/${t.id}: ${m}`));
+    } finally { l.run = run; }
+  }));
+});
+
+test('predictions ask about the setup on screen', () => {
+  const ask = (lab, id) => {
+    const l = DDIA.lab.get(lab);
+    const p = l.presets.find((x) => x.id === id);
+    assert.equal(p.predict.config, undefined, `${lab}/${id} still has predict.config`);
+    return DDIA.lab.predict(l, DDIA.lab.configFor(l, p.config), p.predict.metric).answer;
+  };
+  assert.equal(ask('quorum', 'read-repair'), 1, 'repair after the reply still leaves some stale reads');
+  assert.equal(ask('isolation', 'dirty-read'), 1);
+  assert.equal(ask('isolation', 'lost-update'), 1);
+  assert.equal(ask('isolation', 'phantom'), 1, 'row locks cannot lock a row that does not exist');
 });
 
 /* ---------- report ---------- */
