@@ -643,6 +643,7 @@
       /* 8 ─────────────────────────────────────────────── */
       {
         title: 'Number events so causes come first',
+        lab: { id: 'clocks', preset: 'lamport' },
         caption: 'Per-node counters, clocks and number blocks can give an effect a smaller number than its cause. Lamport clocks take max + 1, so they never do.',
         problem: 'Non-causal sequence numbers',
         fix: 'Lamport timestamps',
@@ -1189,6 +1190,7 @@
       /* 13 ─────────────────────────────────────────────── */
       {
         title: 'Epochs and majorities stop split brain',
+        lab: { id: 'consensus', preset: 'split-brain' },
         caption: 'A leader must win a majority vote for a new epoch, then a majority for each value. Any two majorities overlap, so stale leaders get caught.',
         problem: 'Two leaders',
         fix: 'Epoch numbers + quorums',
@@ -1352,6 +1354,7 @@
       /* 14 ─────────────────────────────────────────────── */
       {
         title: 'Consensus has a price',
+        lab: { id: 'consensus', preset: 'flapping' },
         caption: 'Every decision waits for a majority vote, the voter set is fixed, and a jittery network can trap the cluster in endless elections.',
         problem: 'Slow, rigid, timeout-sensitive',
         fix: 'Use it only where agreement matters',
@@ -1436,6 +1439,7 @@
       /* 15 ─────────────────────────────────────────────── */
       {
         title: 'Outsource coordination to ZooKeeper',
+        lab: { id: 'leases', preset: 'fencing' },
         caption: 'A small consensus cluster offers locks, fencing tokens, sessions with ephemeral nodes, and watches. Apps use it to elect leaders and assign work.',
         problem: 'Hand-rolled coordination',
         fix: 'ZooKeeper / etcd',

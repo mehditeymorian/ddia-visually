@@ -10,7 +10,17 @@ Reading 500 pages of dense text isn't for everyone. Here every idea from the boo
 
 - **11 chapters, 143 interactive cards.** Each card holds one idea, one live diagram, and one line of text.
 - **Break it, then fix it.** Most cards let you trigger the problem (split brain, write skew, lost updates, clock skew…) and then apply the solution.
-- **A playground of labs.** Set the knobs yourself: tune quorums and break replicas, race two transactions under five isolation levels, or place keys on nodes and add a node. Each lab opens on a menu of scenarios. Every scenario asks you to predict first, and challenges grade your design against every run, with a solution after two tries. Related cards link straight into the lab.
+- **A playground of labs.** Set the knobs yourself. There are eight labs:
+  - compare an LSM-tree with a B-tree;
+  - tune quorums and break replicas;
+  - place keys on nodes and add a node;
+  - race two transactions under five isolation levels;
+  - pause a lock holder and fence it off;
+  - skew clocks until a write is lost;
+  - split a cluster and elect a leader;
+  - count a stream while stragglers arrive late.
+
+  Each lab opens on a menu of scenarios. Every scenario asks you to predict first, and challenges grade your design against every run, with a solution after two tries. Related cards link straight into the lab.
 - **A cheat sheet and a 5-question quiz** at the end of every chapter.
 - **Search** any concept (press `/` or `⌘K` / `Ctrl+K`) to jump straight to the card that explains it.
 - **Jump anywhere:** the sidebar lists every chapter, and every card of the chapter you are in. **← →** keys step through cards.

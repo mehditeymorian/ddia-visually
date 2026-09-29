@@ -29,7 +29,17 @@ The site doesn't summarize the book; it simulates it. Each card is one idea, one
 ## Capabilities and Constraints
 
 - 11 chapters, 143 cards, a cheat sheet and a 5-question quiz per chapter, site-wide search, an "All cards" panel, and progress tracking.
-- A playground with three labs so far: Quorum (chapters 5 and 9: knobs and a replica builder), Isolation (chapter 7: a two-transaction timeline) and Partitioning (chapter 6: placement, hot keys, range reads and adding a node). More labs are planned (clocks and fencing, LSM vs B-tree, stream windows, consensus).
+- A playground of eight labs:
+  - Storage engines (chapter 3: LSM-tree vs B-tree, compaction, Bloom filters, a write-ahead log);
+  - Quorum (chapters 5 and 9: knobs and a replica builder);
+  - Partitioning (chapter 6: placement, hot keys, range reads and adding a node);
+  - Isolation (chapter 7: a two-transaction timeline);
+  - Leases and fencing (chapters 8 and 9: pauses, expiry, fencing tokens);
+  - Clocks and ordering (chapters 8 and 9: skew, last-write-wins, Lamport clocks, commit wait);
+  - Consensus and epochs (chapters 5, 8 and 9: split brain, majorities, election timeouts);
+  - Stream windows (chapter 11: event time, stragglers, watermarks, corrections).
+
+  Chapters 1, 2, 4 and 10 have no lab yet.
 - Plain HTML, CSS and JavaScript with inline SVG. No build step, no frameworks and no external libraries. Chapters are authored through `DDIA.chapter({...})` and a shared visualization kit (`js/viz.js`); labs through `DDIA.lab({...})`. Visual changes to diagrams belong in the shared kit so chapter files don't need editing.
 - Light and dark themes are both required. The site must work on phones.
 - A lab opens on a menu of scenario cards, each with a small drawing of its setup, a one-line question and the learner's status. Challenges put the goal, a pass checklist and Test together, and reveal a solution after two failed tests.
@@ -44,7 +54,7 @@ The site doesn't summarize the book; it simulates it. Each card is one idea, one
 
 ## Evidence on Hand
 
-- Real content: 143 cards with live demos (`js/chapters/ch01.js` to `ch11.js`), 3 labs (`js/labs/`), cheat sheets and quizzes.
+- Real content: 143 cards with live demos (`js/chapters/ch01.js` to `ch11.js`), 8 labs (`js/labs/`), cheat sheets and quizzes.
 - There are no testimonials, user counts, ratings or endorsements. Don't invent any.
 - `book.pdf` sits in the working folder for the maintainer's reference only. It is git-ignored and must never be published or quoted.
 

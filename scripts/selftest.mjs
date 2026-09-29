@@ -16,7 +16,8 @@ const chrome = process.env.CHROME || '/Applications/Google Chrome.app/Contents/M
 const profile = mkdtempSync(join(tmpdir(), 'ddia-selftest-'));
 const url = pathToFileURL(join(root, 'index.html')).href + `?selftest=${which}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const deadline = Date.now() + (which === 'all' ? 1800 : 300) * 1000;
+// the labs walk grows with every lab (each tab, control and challenge), so it gets a longer budget
+const deadline = Date.now() + ({ all: 3000, labs: 1200 }[which] || 300) * 1000;
 
 const proc = spawn(chrome, [
   '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',

@@ -416,6 +416,7 @@
       /* 4 ─────────────────────────────────────────────── */
       {
         title: 'Timeout too short or too long?',
+        lab: { id: 'consensus', preset: 'flapping' },
         caption: 'Short timeouts wrongly declare slow nodes dead. Long ones leave users waiting on dead nodes. Adaptive detectors learn the delay distribution.',
         problem: 'Unbounded delays',
         fix: 'Adaptive timeouts (φ accrual)',
@@ -814,6 +815,7 @@
       /* 8 ─────────────────────────────────────────────── */
       {
         title: 'Later write, earlier timestamp: silently lost',
+        lab: { id: 'clocks', preset: 'skewed' },
         caption: 'Last-write-wins trusts each node\'s clock. If the second writer\'s node lags, its newer write gets an older timestamp and is thrown away.',
         problem: 'Clock skew + last write wins',
         fix: 'Logical clocks',
@@ -897,6 +899,7 @@
       /* 9 ─────────────────────────────────────────────── */
       {
         title: 'A clock reading is a range',
+        lab: { id: 'clocks', preset: 'commit-wait' },
         caption: 'Each reading is really [earliest, latest]. Spanner waits out that uncertainty before confirming a commit, so causally later transactions get later timestamps.',
         problem: 'Overlapping uncertainty',
         fix: 'Commit wait',
@@ -985,6 +988,7 @@
       /* 10 ─────────────────────────────────────────────── */
       {
         title: 'Frozen node wakes up, already voted out',
+        lab: { id: 'leases', preset: 'zombie' },
         caption: 'GC, VM suspension, swapping or slow disk I/O can freeze a node mid-task. Others then vote it dead, and the majority\'s verdict must win.',
         problem: 'Process pauses',
         fix: 'The majority decides; the old leader steps down',
@@ -1093,6 +1097,7 @@
       /* 11 ─────────────────────────────────────────────── */
       {
         title: 'Expired lease, still writing? Fence it off.',
+        lab: { id: 'leases', preset: 'zombie' },
         caption: 'A paused client can wake up believing it still holds the lock. If storage rejects writes carrying an older fencing token, the stale write bounces.',
         problem: 'Zombie lock holder',
         fix: 'Fencing tokens',

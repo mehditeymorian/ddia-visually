@@ -1131,6 +1131,7 @@
       /* 11 ─────────────────────────────────────────────── */
       {
         title: 'Event time vs processing time',
+        lab: { id: 'streams', preset: 'arrival' },
         caption: 'Bucket events by when they happened, not when they arrived. Otherwise restarts, late stragglers and wrong clocks distort the numbers.',
         problem: 'Delays reorder events',
         fix: 'Event timestamps, corrections, clock offsets',
