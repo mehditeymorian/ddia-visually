@@ -370,7 +370,8 @@
     function paintLoad(load, total, n) {
       for (let k = 0; k < n; k++) {
         const share = total ? load[k] / total : 0;
-        bars[k].set({ w: Math.max(0, BAR_W * Math.min(1, share)), kind: share > HOT / n ? 'bad' : 'data' });
+        // a handful of writes proves nothing: only a filled-in phase can turn a bar red
+        bars[k].set({ w: Math.max(0, BAR_W * Math.min(1, share)), kind: total >= 48 && share > HOT / n ? 'bad' : 'data' });
         pcts[k].set(`${Math.round(share * 100)}%`);
       }
     }
