@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DDIA visually — Designing Data-Intensive Applications, drawn</title>
+  <meta name="description" content="An unofficial, visual and interactive study companion for Designing Data-Intensive Applications: every chapter as diagrams you can play with, cheat sheets and quick quizzes.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='9' fill='%23c8471f'/%3E%3Cellipse cx='16' cy='10.5' rx='7.5' ry='2.6' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Cpath d='M8.5 10.5v10.5c0 1.4 3.4 2.6 7.5 2.6s7.5-1.2 7.5-2.6V10.5M8.5 15.8c0 1.4 3.4 2.6 7.5 2.6s7.5-1.2 7.5-2.6' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=5">
+  <script>
+    // apply saved theme before paint
+    try { var t = JSON.parse(localStorage.getItem('ddia-visual-guide-v1') || '{}').theme; if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <noscript><p style="padding:24px">This guide is interactive and needs JavaScript.</p></noscript>
+
+  <script src="js/viz.js?v=5"></script>
+  <script src="js/app.js?v=5"></script>
+  <script src="js/chapters/ch01.js?v=5"></script>
+  <script src="js/chapters/ch02.js?v=5"></script>
+  <script src="js/chapters/ch03.js?v=5"></script>
+  <script src="js/chapters/ch04.js?v=5"></script>
+  <script src="js/chapters/ch05.js?v=5"></script>
+  <script src="js/chapters/ch06.js?v=5"></script>
+  <script src="js/chapters/ch07.js?v=5"></script>
+  <script src="js/chapters/ch08.js?v=5"></script>
+  <script src="js/chapters/ch09.js?v=5"></script>
+  <script src="js/chapters/ch10.js?v=5"></script>
+  <script src="js/chapters/ch11.js?v=5"></script>
+  <script>DDIA.start();</script>
+</body>
+</html>
