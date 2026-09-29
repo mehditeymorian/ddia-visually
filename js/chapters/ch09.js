@@ -1191,7 +1191,6 @@
       /* 13 ─────────────────────────────────────────────── */
       {
         title: 'Epochs and majorities stop split brain',
-        lab: { id: 'leases', preset: 'fencing' },
         caption: 'A leader must win a majority vote for a new epoch, then a majority for each value. Any two majorities overlap, so stale leaders get caught.',
         problem: 'Two leaders',
         fix: 'Epoch numbers + quorums',
@@ -1439,6 +1438,7 @@
       /* 15 ─────────────────────────────────────────────── */
       {
         title: 'Outsource coordination to ZooKeeper',
+        lab: { id: 'leases', preset: 'fencing' },
         caption: 'A small consensus cluster offers locks, fencing tokens, sessions with ephemeral nodes, and watches. Apps use it to elect leaders and assign work.',
         problem: 'Hand-rolled coordination',
         fix: 'ZooKeeper / etcd',

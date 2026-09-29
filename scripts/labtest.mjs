@@ -12,7 +12,7 @@ globalThis.window = globalThis;
 const loadErrors = [];
 const origError = console.error;
 console.error = (...a) => { loadErrors.push(a.map(String).join(' ')); };
-for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js', 'js/labs/partition.js', 'js/labs/leases.js', 'js/labs/clocks.js']) {
+for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js', 'js/labs/partition.js', 'js/labs/leases.js', 'js/labs/clocks.js', 'js/labs/storage.js']) {
   try { vm.runInThisContext(readFileSync(join(root, f), 'utf8'), { filename: f }); } catch (e) { loadErrors.push(`${f}: ${e.message}`); }
 }
 console.error = origError;
@@ -408,7 +408,7 @@ test('leases: a pause shorter than the lease is harmless; a longer one lets a zo
   assert.equal(lsCount({ fault: 'long', lease: 30, fence: 'off' }, 'corrupt'), 0, 'a 30 s lease outlasts every 16 s pause');
 });
 
-test('leases: fencing turns every stale write into a rejected one', () => {
+test('leases: fencing rejects every stale write that lands after a newer one', () => {
   ['short', 'long', 'crash', 'mixed'].forEach((fault) => [5, 10, 30].forEach((lease) => {
     const off = lsRuns({ fault, lease, fence: 'off' });
     const on = lsRuns({ fault, lease, fence: 'on' });
@@ -418,6 +418,28 @@ test('leases: fencing turns every stale write into a rejected one', () => {
       assert.equal(r.stats.wait, off[i].stats.wait, 'fencing never slows the handover');
     });
   }));
+});
+
+test('leases: every event fits the 0–40 s timeline, in a sensible order', () => {
+  ['none', 'short', 'long', 'crash', 'mixed'].forEach((fault) => [5, 10, 30].forEach((lease) => ['off', 'on'].forEach((fence) => {
+    const cfg = DDIA.lab.configFor(LS(), { fault, lease, fence });
+    LS().samples(cfg).forEach((seed) => {
+      const { trace } = LS().run(cfg, seed);
+      const where = `${fault}, ${lease} s, seed ${seed}`;
+      assert.ok(trace[trace.length - 1].t <= 40, `${where}: ends at ${trace[trace.length - 1].t} s`);
+      const ends = trace.filter((e) => (e.type === 'release' && e.from === 1) || e.type === 'expire');
+      assert.equal(ends.length, 1, `${where}: client 1's lease ends exactly once`);
+      const lost = trace.findIndex((e) => e.type === 'lost');
+      if (lost >= 0) assert.ok(trace.findIndex((e) => e.type === 'expire') < lost, `${where}: noticed after it expired`);
+      trace.slice(1).forEach((e, i) => assert.ok(e.t >= trace[i].t, `${where}: time runs forward`));
+    });
+  })));
+});
+
+test('leases: the zombie and fencing scenarios open on a run that shows the zombie', () => {
+  const open = (id) => { const p = LS().presets.find((x) => x.id === id); return LS().run(DDIA.lab.configFor(LS(), p.config), p.input).stats; };
+  assert.equal(open('zombie').corrupt, 1);
+  assert.ok(open('fencing').fenced > 0);
 });
 
 test('leases: after a crash client 2 waits about one lease', () => {
@@ -459,6 +481,48 @@ test('clocks: commit wait keeps every order and waits exactly the skew', () => {
   })));
 });
 
+/* ---------- storage lab ---------- */
+const SG = () => DDIA.lab.get('storage');
+const sgRuns = (cfg) => DDIA.lab.runAll(SG(), DDIA.lab.configFor(SG(), cfg));
+const sgCount = (cfg, metric) => sgRuns(cfg).filter((r) => r.stats[metric] > 0).length;
+
+test('storage: the same seed gives the same trace', () => {
+  const cfg = DDIA.lab.configFor(SG(), { engine: 'lsm', load: 'updates', crash: 'midway', bloom: 'on' });
+  assert.deepEqual(SG().run(cfg, 8), SG().run(cfg, 8));
+});
+
+test('storage: page rewrites make B-tree writes heavy; LSM-tree writes stay light', () => {
+  ['inserts', 'updates', 'misses'].forEach((load) => {
+    assert.equal(sgCount({ engine: 'btree', load }, 'heavy'), 100, `B-tree, ${load}`);
+    ['off', 'on'].forEach((compact) => ['off', 'on'].forEach((wal) => assert.equal(sgCount({ engine: 'lsm', load, compact, wal }, 'heavy'), 0, `LSM, ${load}, compaction ${compact}, log ${wal}`)));
+  });
+});
+
+test('storage: without compaction reads check many segments, unless Bloom filters skip them', () => {
+  assert.equal(sgCount({ engine: 'lsm', load: 'misses', compact: 'off', bloom: 'off' }, 'slow'), 100);
+  assert.equal(sgCount({ engine: 'lsm', load: 'misses', compact: 'off', bloom: 'on' }, 'slow'), 0);
+  assert.equal(sgCount({ engine: 'lsm', load: 'misses', compact: 'on', bloom: 'off' }, 'slow'), 0);
+});
+
+test('storage: compaction clears old versions', () => {
+  assert.equal(sgCount({ engine: 'lsm', load: 'updates', compact: 'off' }, 'bloat'), 100);
+  assert.equal(sgCount({ engine: 'lsm', load: 'updates', compact: 'on' }, 'bloat'), 0);
+});
+
+test('storage: a write-ahead log makes both engines crash-safe', () => {
+  const lsmLost = sgCount({ engine: 'lsm', crash: 'midway', wal: 'off' }, 'lost');
+  const torn = sgCount({ engine: 'btree', crash: 'midway', wal: 'off' }, 'corrupt');
+  assert.ok(lsmLost > 50, `the memtable is usually lost (${lsmLost})`);
+  assert.ok(torn > 0 && torn < 50, `only a crash mid-split tears the tree (${torn})`);
+  ['lsm', 'btree'].forEach((engine) => sgRuns({ engine, crash: 'midway', wal: 'on' }).forEach((r) => assert.equal(r.stats.lost + r.stats.corrupt, 0, engine)));
+});
+
+test('storage: compaction and Bloom filters are LSM-tree parts only', () => {
+  const cfg = DDIA.lab.configFor(SG(), { engine: 'btree', compact: 'on', bloom: 'on' });
+  assert.equal(cfg.compact, 'off');
+  assert.equal(cfg.bloom, 'off');
+});
+
 /* ---------- presets, predicts, challenges, card links ---------- */
 test('every lab passes validation', () => {
   assert.ok(DDIA.labs.length >= 2);
@@ -492,9 +556,9 @@ test('every card lab link points at a real lab and preset', () => {
   const links = [];
   const saved = DDIA.chapter;
   DDIA.chapter = (def) => def.cards.forEach((c, i) => { if (c.lab) links.push({ where: `ch${def.id}/${i + 1}`, lab: c.lab }); });
-  for (const n of ['05', '06', '07', '08', '09']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
+  for (const n of ['03', '05', '06', '07', '08', '09']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
   DDIA.chapter = saved;
-  assert.ok(links.length >= 26, `expected at least 26 card links, found ${links.length}`);
+  assert.ok(links.length >= 32, `expected at least 32 card links, found ${links.length}`);
   links.forEach(({ where, lab }) => {
     const l = DDIA.lab.get(lab.id);
     assert.ok(l, `${where}: no lab ${lab.id}`);
@@ -561,6 +625,10 @@ test('predictions ask about the setup on screen', () => {
   assert.deepEqual(ask('isolation', 'dirty-read'), [1, 2, 6]);
   assert.deepEqual(ask('isolation', 'lost-update'), [1, 18, 20]);
   assert.deepEqual(ask('isolation', 'phantom'), [1, 12, 20], 'row locks cannot lock a row that does not exist');
+  assert.deepEqual(ask('leases', 'short-pause'), [0, 0, 100]);
+  assert.deepEqual(ask('leases', 'zombie'), [1, 40, 100]);
+  assert.deepEqual(ask('leases', 'fencing'), [0, 0, 100]);
+  assert.deepEqual(ask('leases', 'crash'), [2, 100, 100]);
 });
 
 test('validation asks for sketches, blurbs and solution reasons, and rejects predict.config', () => {

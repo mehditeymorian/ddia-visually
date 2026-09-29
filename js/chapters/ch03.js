@@ -300,6 +300,7 @@
       /* 2 ─────────────────────────────────────────────── */
       {
         title: 'Sorted segments need only a sparse index',
+        lab: { id: 'storage', preset: 'no-compaction' },
         caption: 'Hash maps need every key in RAM and cannot do ranges. Sorted segments index one key per block; Bloom filters skip misses.',
         problem: 'All keys in RAM, no ranges',
         fix: 'SSTables + sparse index + Bloom',
@@ -506,6 +507,7 @@
       /* 3 ─────────────────────────────────────────────── */
       {
         title: 'Writes land in a sorted memtable',
+        lab: { id: 'storage', preset: 'crash-lsm' },
         caption: 'Writes go into a sorted in-memory tree. When it fills, it is flushed to disk as a new SSTable. A write-ahead log survives crashes.',
         problem: 'A crash wipes the memtable',
         fix: 'Write-ahead log (WAL)',
@@ -687,6 +689,7 @@
       /* 4 ─────────────────────────────────────────────── */
       {
         title: 'Compaction merges segments like merge sort',
+        lab: { id: 'storage', preset: 'overwrites' },
         caption: 'Walk the sorted segments side by side, always copying the smallest key. Same key twice? Keep the newest. Tombstones erase old values.',
         tags: ['LevelDB', 'RocksDB', 'Cassandra', 'HBase'],
         demo(el, v) {
@@ -797,6 +800,7 @@
       /* 5 ─────────────────────────────────────────────── */
       {
         title: 'B-trees: fixed pages, split when full',
+        lab: { id: 'storage', preset: 'btree-writes' },
         caption: 'Pages form a shallow tree. A lookup reads one page per level. A full page splits and pushes its middle key up.',
         tags: ['PostgreSQL', 'MySQL', 'SQLite', 'Oracle'],
         demo(el, v) {
@@ -992,6 +996,7 @@
       /* 6 ─────────────────────────────────────────────── */
       {
         title: 'A split rewrites 3 pages. Crash midway?',
+        lab: { id: 'storage', preset: 'crash-btree' },
         caption: 'A split overwrites several pages. Crash halfway and a page is orphaned. A write-ahead log or copy-on-write keeps it safe; latches stop readers peeking.',
         problem: 'Crash or reader mid-split',
         fix: 'WAL, copy-on-write, latches',
@@ -1220,6 +1225,7 @@
       /* 7 ─────────────────────────────────────────────── */
       {
         title: 'B-tree vs LSM-tree: pick your trade-off',
+        lab: { id: 'storage', preset: 'lsm-writes' },
         caption: 'LSM-trees write sequentially and compress well, so they absorb more writes. B-trees keep latency predictable, with no compaction spikes.',
         tags: ['RocksDB', 'Cassandra', 'PostgreSQL', 'InnoDB'],
         demo(el, v) {

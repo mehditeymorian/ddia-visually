@@ -12,8 +12,10 @@
   const STUCK = 15;         // client 2 waiting longer than this is a slow failover
   const PAUSE = { short: [0.2, 2], long: [4, 16] }; // seconds
   const LEASES = [5, 10, 30];
-  const FAULT_LABEL = { none: 'None', short: 'Short pause', long: 'Long pause', crash: 'Crash', mixed: 'Pause or crash' };
+  const FAULT_LABEL = { none: 'None', short: 'Short pause', long: 'Long pause', crash: 'Crash', mixed: 'Long pause or crash' };
   const r1 = (x) => Math.round(x * 10) / 10;
+  // events at the same tenth of a second happen in this order: an expiry before the check that notices it
+  const RANK = { grant: 0, want: 1, renew: 1, pause: 2, crash: 2, expire: 3, release: 3, write: 4, lost: 5, done: 9 };
 
   function run(cfg, seed) {
     const rng = DDIA.sim.rng(seed);
@@ -61,6 +63,7 @@
     let newest = 0;
     let corrupt = 0;
     let fenced = 0;
+    const expired = ev.some((e) => e.type === 'expire');
     writes.sort((a, b) => a.t - b.t).forEach((wr) => {
       let result = 'ok';
       if (cfg.fence === 'on' && wr.token < seen) { result = 'fenced'; fenced++; }
@@ -69,12 +72,14 @@
         newest = Math.max(newest, wr.token);
       }
       seen = Math.max(seen, wr.token);
-      at(wr.t, 'write', { from: wr.from, token: wr.token, result });
+      // a late write is client 1 writing after the lock service already counted its lease as over
+      at(wr.t, 'write', { from: wr.from, token: wr.token, result, late: wr.from === 1 && expired && wr.t >= end });
     });
     const wait = r1(grant - WANTS);
-    ev.sort((a, b) => a.t - b.t);
+    const cut = ev.some((e) => e.type === 'lost') ? 1 : 0; // client 1 found its lease gone and gave up its job
+    ev.sort((a, b) => a.t - b.t || RANK[a.type] - RANK[b.type]);
     ev.push({ t: r1(Math.max(...ev.map((e) => e.t)) + 1), type: 'done', corrupt, fault, gone });
-    return { trace: ev, stats: { corrupt, stuck: wait > STUCK ? 1 : 0, fenced, wait } };
+    return { trace: ev, stats: { corrupt, stuck: wait > STUCK ? 1 : 0, cut, fenced, wait } };
   }
 
   /* ---------- the lab ---------- */
@@ -105,7 +110,8 @@
       s += `<rect x="${X(0)}" y="10" width="${cfg.lease * 5.3}" height="8" rx="4" fill="var(--k-good-f)" stroke="var(--k-good-s)" stroke-width="1.4"/>`;
       const f = cfg.fault;
       if (f === 'short') s += `<rect x="${X(3)}" y="16" width="8" height="12" rx="3" fill="var(--k-warn-f)" stroke="var(--k-warn-s)" stroke-width="1.4"/>`;
-      if (f === 'long' || f === 'mixed') s += `<rect x="${X(3)}" y="16" width="${12 * 5.3}" height="12" rx="3" fill="var(--k-warn-f)" stroke="var(--k-warn-s)" stroke-width="1.4"${f === 'mixed' ? ' stroke-dasharray="4 3"' : ''}/>`;
+      // a long pause lasts 4–16 s: solid for the part every pause has, dashed for the part only some reach
+      if (f === 'long' || f === 'mixed') s += `<rect x="${X(3)}" y="16" width="${4 * 5.3}" height="12" rx="3" fill="var(--k-warn-f)" stroke="var(--k-warn-s)" stroke-width="1.4"/><rect x="${X(7)}" y="16" width="${12 * 5.3}" height="12" rx="3" fill="none" stroke="var(--k-warn-s)" stroke-width="1.4" stroke-dasharray="4 3"/>`;
       if (f === 'crash' || f === 'mixed') s += `<path d="M${X(3) - 5} 17l10 10M${X(3) + 5} 17l-10 10" stroke="var(--k-bad-s)" stroke-width="2.2" stroke-linecap="round"/>`;
       if (cfg.fence === 'on') s += '<rect x="196" y="40" width="20" height="20" rx="4" fill="var(--k-good-f)" stroke="var(--k-good-s)" stroke-width="1.6"/><path d="M201 50l4 4 7-8" stroke="var(--k-good-s)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
       const label = `lease ${cfg.lease} s${cfg.fence === 'on' ? ', fencing' : ''}`;
@@ -138,12 +144,14 @@
     metrics: [
       { id: 'corrupt', label: 'File corrupted', kind: 'bad', fmt: yn },
       { id: 'stuck', label: `Client 2 waits over ${STUCK} s`, kind: 'warn', fmt: yn },
+      { id: 'cut', label: 'Client 1 cut off mid-job', kind: 'warn', fmt: yn },
       { id: 'fenced', label: 'Writes fenced off', kind: 'neutral', plain: true },
       { id: 'wait', label: 'Client 2 waited', kind: 'neutral', plain: true, fmt: (v) => `${v} s` },
     ],
     classify(st) {
       if (st.corrupt) return { kind: 'bad', label: 'file corrupted' };
-      if (st.stuck) return { kind: 'warn', label: 'slow failover' };
+      if (st.stuck) return { kind: 'warn', label: 'slow handover' };
+      if (st.cut) return { kind: 'warn', label: 'client 1 cut off' };
       if (st.fenced) return { kind: 'good', label: 'zombie fenced off' };
       return { kind: 'good', label: 'safe' };
     },
@@ -158,16 +166,16 @@
       },
       {
         id: 'zombie', title: 'Zombie lock holder',
-        blurb: 'A long pause outlives the lease. Who writes last?',
-        config: { fault: 'long', lease: 10, fence: 'off' }, knobs: ['fault', 'fence'],
+        blurb: 'A long pause can outlive the lease. Who writes last?',
+        config: { fault: 'long', lease: 10, fence: 'off' }, knobs: ['fault', 'fence'], input: 5, // a run where the pause wins
         nudge: 'Turn fencing tokens on and replay.',
         predict: { q: 'A 4–16 s pause and a 10 s lease. Can client 1 overwrite client 2’s newer data?', metric: 'corrupt' },
       },
       {
         id: 'fencing', title: 'Fencing tokens',
         blurb: 'Storage remembers the newest token. Can a zombie still write?',
-        config: { fault: 'long', lease: 10, fence: 'on' }, knobs: ['fence', 'fault'],
-        nudge: 'Try a crash too: fencing never slows the handover.',
+        config: { fault: 'long', lease: 10, fence: 'on' }, knobs: ['fence', 'fault'], input: 5, // a run with a zombie write to fence
+        nudge: 'Try a crash too: only the lease sets how long client 2 waits.',
         predict: { q: 'Storage rejects any token older than one it has seen. Can the file get corrupted?', metric: 'corrupt' },
       },
       {
@@ -262,6 +270,7 @@
     const log = v.log(box, { title: 'What happened, newest first', max: 6 });
     const X = (t) => X0 + Math.min(40, t) * XS;
     let st, cursor, clock, spans, fileText;
+    let labelled = false; // client 1's first routine write has its label
 
     function draw() {
       holder.textContent = '';
@@ -293,11 +302,15 @@
       const exp = get('expire');
       const pause = get('pause');
       const lost = get('lost');
+      const crash = get('crash');
       const end1 = rel1 ? rel1.t : exp.t;
-      add('c1', g1.t, end1, 'good');
+      // after a crash the lock service still counts the dead client as the holder until the lease runs out
+      add('c1', g1.t, crash ? crash.t : end1, 'good');
+      if (crash) add('c1', crash.t, end1, 'ghost');
       if (pause) add('c1', pause.t, pause.until, 'warn', { onLane: true, label: 'paused' });
-      // the zombie stretch: client 1 still thinks it holds the lease after the lock service gave it away
-      if (exp && pause && pause.until > exp.t) add('c1', exp.t, lost ? lost.t : pause.until + 0.1, 'bad');
+      // the zombie stretch: client 1 still acts on a lease the lock service already counted as over
+      const late = trace.filter((e) => e.type === 'write' && e.late);
+      if (exp && late.length) add('c1', exp.t, lost ? lost.t : late[late.length - 1].t + 0.3, 'bad');
       add('c2', WANTS, g2.t, 'ghost', { onLane: true, label: 'waiting' });
       add('c2', g2.t, g2.t + 1, 'good');
     }
@@ -325,19 +338,27 @@
       } else if (e.type === 'expire') {
         st.text(X(e.t), LANE.lock - 10, 'expired', { size: 14, kind: 'warn', weight: 700 });
         log.add(`Lease #${e.token} expires at ${e.t.toFixed(1)} s`, 'warn');
-      } else if (e.type === 'lost') log.add('Client 1 checks its clock: the lease is gone, so it stops', 'info');
+      } else if (e.type === 'lost') log.add('Client 1 checks its clock: the lease is gone, so it stops mid-job', 'warn');
+      else if (e.type === 'want') log.add('Client 2 asks for the lock and waits', 'info');
+      else if (e.type === 'release' && e.from === 1) log.add('Client 1 finishes its job and releases the lock', 'good');
       else if (e.type === 'write') {
         const lane = e.from === 1 ? 'c1' : 'c2';
-        const kind = e.result === 'ok' ? 'good' : e.result === 'fenced' ? 'warn' : 'bad';
-        const sign = e.result === 'ok' ? '✓' : '✕';
+        // an accepted write gets ✓ (red when it overwrote newer data); only a fenced write gets ✕
+        const kind = e.result === 'fenced' ? 'warn' : e.result === 'corrupt' ? 'bad' : e.late ? 'warn' : 'good';
+        const sign = e.result === 'fenced' ? '✕' : '✓';
+        // client 1's routine writes sit about 2 s apart, too close for labels: the first gets one, the rest a tick
+        const routine = e.from === 1 && e.result === 'ok' && !e.late && labelled;
+        if (e.from === 1 && !routine) labelled = true;
         const put = () => {
           // client 1's writes are marked above the storage line and client 2's below, so close writes don't collide
-          st.text(X(e.t), LANE.store + (e.from === 1 ? -8 : 20), `#${e.token} ${sign}`, { size: 14, kind, weight: 700, mono: true });
+          if (routine) st.rect(X(e.t) - 2, LANE.store - 14, 4, 10, { kind: 'good', rx: 2 });
+          else st.text(X(e.t), LANE.store + (e.from === 1 ? -8 : 20), `#${e.token} ${sign}`, { size: 14, kind, weight: 700, mono: true });
           if (e.result === 'corrupt') fileText.set('corrupted', 'bad');
-          else if (e.result === 'fenced') fileText.set(`${OLD} < ${NEW}`, 'warn');
+          else if (e.result === 'fenced') fileText.set(`#${e.token} rejected`, 'warn');
         };
         if (e.result === 'corrupt') log.add(`Client 1 wakes and writes with #${e.token}: storage accepts it over #${NEW}`, 'bad');
         else if (e.result === 'fenced') log.add(`Client 1 wakes and writes with #${e.token}: rejected, storage has seen #${NEW}`, 'good');
+        else if (e.late) log.add(`Lease #${e.token} has expired, but storage hasn’t seen #${NEW} yet, so it accepts`, 'warn');
         else log.add(`Client ${e.from} writes with #${e.token} ✓`, 'info');
         if (!animate) { put(); return null; }
         return st.send({ x: X(e.t), y: LANE[lane] }, { x: X(e.t), y: LANE.store }, { label: `#${e.token}`, kind: e.result === 'ok' ? 'data' : kind, dur: api.pace(420) }).then(put);
@@ -347,6 +368,7 @@
 
     function render(result, cfg, input, o) {
       v.restart();
+      labelled = false;
       draw();
       log.clear();
       const trace = result.trace;

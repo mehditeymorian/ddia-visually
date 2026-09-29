@@ -1097,7 +1097,7 @@
       /* 11 ─────────────────────────────────────────────── */
       {
         title: 'Expired lease, still writing? Fence it off.',
-        lab: { id: 'leases', preset: 'fencing' },
+        lab: { id: 'leases', preset: 'zombie' },
         caption: 'A paused client can wake up believing it still holds the lock. If storage rejects writes carrying an older fencing token, the stale write bounces.',
         problem: 'Zombie lock holder',
         fix: 'Fencing tokens',
