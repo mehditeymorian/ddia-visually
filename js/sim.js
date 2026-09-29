@@ -100,14 +100,15 @@
    * if the receiver is down by then. Messages from a down sender are dropped at once.
    */
   function net(ctx, o) {
-    const [lo, hi] = o.latency;
+    // latency: [lo, hi] uniform ms, or a function(rng) → ms for skewed (tail-heavy) networks
+    const delay = typeof o.latency === 'function' ? () => o.latency(ctx.rng) : () => ctx.rng.int(o.latency[0], o.latency[1]);
     const isDown = o.isDown || (() => false);
     let id = 0;
     return {
       send(from, to, payload, extra = 0) {
         const mid = ++id;
         if (isDown(from, ctx.now)) { ctx.emit('drop', { id: mid, from, to, payload, early: true }); return mid; }
-        const d = ctx.rng.int(lo, hi) + extra;
+        const d = delay() + extra;
         ctx.emit('send', { id: mid, from, to, payload, arrive: ctx.now + d });
         ctx.schedule(d, 'deliver', { id: mid, from, to, payload });
         return mid;

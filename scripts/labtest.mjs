@@ -130,6 +130,59 @@ test('interleavings keep each transaction in order', () => {
   assert.equal(DDIA.lab.interleavings(5, 5).length, 252);
 });
 
+/* ---------- quorum lab ---------- */
+const Q = () => DDIA.lab.get('quorum');
+const qcfg = (o) => DDIA.lab.configFor(Q(), {}, o);
+const qruns = (o, m) => DDIA.lab.runAll(Q(), qcfg(o)).filter((x) => x.stats[m] > 0).length;
+const qsum = (o, m) => DDIA.lab.runAll(Q(), qcfg(o)).reduce((s, x) => s + x.stats[m], 0);
+
+test('quorum: same seed, same trace', () => {
+  const c = qcfg({ net: 'jittery' });
+  assert.deepEqual(Q().run(c, 5).trace, Q().run(c, 5).trace);
+  assert.notDeepEqual(Q().run(c, 5).trace, Q().run(c, 6).trace);
+});
+
+test('quorum: w + r > n never serves stale reads', () => {
+  for (const slots of [['up', 'up', 'rec'], ['up', 'up', 'lag'], ['up', 'up', 'up']]) {
+    for (const net of ['calm', 'jittery']) assert.equal(qruns({ n: 3, w: 2, r: 2, slots, net }, 'stale'), 0, slots + ' ' + net);
+  }
+  assert.equal(qruns({ n: 5, w: 3, r: 3, slots: ['up', 'up', 'lag', 'rec', 'up'], net: 'jittery' }, 'stale'), 0);
+});
+
+test('quorum: w1 r1 with a lagging replica is sometimes stale', () => {
+  assert.ok(qruns({ n: 3, w: 1, r: 1, slots: ['up', 'up', 'lag'] }, 'stale') > 0);
+});
+
+test('quorum: w above the live replicas fails every run', () => {
+  assert.equal(qruns({ n: 3, w: 3, r: 1, slots: ['up', 'up', 'down'] }, 'failed'), 100);
+  assert.equal(qruns({ n: 3, w: 2, r: 2, slots: ['up', 'up', 'down'] }, 'failed'), 0);
+});
+
+test('quorum: jitter can send a quorum read back in time; sync repair cannot', () => {
+  assert.ok(qruns({ n: 3, w: 2, r: 2, net: 'jittery' }, 'backInTime') > 0);
+  assert.equal(qruns({ n: 3, w: 2, r: 2, net: 'jittery', repair: 'sync' }, 'backInTime'), 0);
+  assert.equal(qruns({ n: 3, w: 2, r: 2, net: 'jittery', repair: 'sync' }, 'failed'), 0);
+});
+
+test('quorum: async read repair heals a recovering replica', () => {
+  const base = { n: 3, w: 1, r: 1, slots: ['up', 'up', 'rec'] };
+  const off = qsum(Object.assign({ repair: 'off' }, base), 'stale');
+  const on = qsum(Object.assign({ repair: 'async' }, base), 'stale');
+  assert.ok(off > 0, 'stale without repair');
+  assert.ok(on < off / 3, `repair cuts stale reads (${off} → ${on})`);
+});
+
+test('quorum: the back-in-time preset opens on a run that shows it', () => {
+  const p = Q().presets.find((x) => x.id === 'back-in-time');
+  assert.ok(Q().run(DDIA.lab.configFor(Q(), p.config), p.input).stats.backInTime > 0);
+});
+
+test('quorum: normalize clamps w and r to n and sizes slots', () => {
+  const c = qcfg({ n: 3, w: 5, r: 4, slots: ['up'] });
+  assert.equal(c.w, 3); assert.equal(c.r, 3); assert.deepEqual(c.slots, ['up', 'up', 'up']);
+  assert.equal(qcfg({ n: 5, slots: ['down', 'bogus'] }).slots.join(), 'down,up,up,up,up');
+});
+
 /* ---------- report ---------- */
 const failed = results.filter((r) => !r.ok);
 for (const r of results) {
