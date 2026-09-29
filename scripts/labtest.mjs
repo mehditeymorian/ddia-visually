@@ -12,7 +12,7 @@ globalThis.window = globalThis;
 const loadErrors = [];
 const origError = console.error;
 console.error = (...a) => { loadErrors.push(a.map(String).join(' ')); };
-for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js', 'js/labs/partition.js', 'js/labs/leases.js', 'js/labs/clocks.js', 'js/labs/storage.js', 'js/labs/streams.js']) {
+for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js', 'js/labs/partition.js', 'js/labs/leases.js', 'js/labs/clocks.js', 'js/labs/storage.js', 'js/labs/streams.js', 'js/labs/consensus.js']) {
   try { vm.runInThisContext(readFileSync(join(root, f), 'utf8'), { filename: f }); } catch (e) { loadErrors.push(`${f}: ${e.message}`); }
 }
 console.error = origError;
@@ -560,6 +560,43 @@ test('streams: every event is counted once, in the minute it happened', () => {
   });
 });
 
+/* ---------- consensus lab ---------- */
+const CS = () => DDIA.lab.get('consensus');
+const csRuns = (cfg) => DDIA.lab.runAll(CS(), DDIA.lab.configFor(CS(), cfg));
+const csCount = (cfg, metric) => csRuns(cfg).filter((r) => r.stats[metric] > 0).length;
+
+test('consensus: the same seed gives the same trace', () => {
+  const cfg = DDIA.lab.configFor(CS(), { fault: 'slow-crash', rule: 'majority', timeout: 1 });
+  assert.deepEqual(CS().run(cfg, 2), CS().run(cfg, 2));
+});
+
+test('consensus: without a majority rule a partition loses acknowledged writes', () => {
+  [1, 3, 5].forEach((timeout) => {
+    assert.equal(csCount({ fault: 'partition', rule: 'naive', timeout }, 'lost'), 100, `${timeout} s`);
+    assert.equal(csCount({ fault: 'partition', rule: 'majority', timeout }, 'lost'), 0, `${timeout} s`);
+  });
+});
+
+test('consensus: the majority rule never loses a write, whatever goes wrong', () => {
+  ['none', 'crash', 'partition', 'slow', 'slow-crash'].forEach((fault) => [1, 3, 5].forEach((timeout) => {
+    assert.equal(csCount({ fault, rule: 'majority', timeout }, 'lost'), 0, `${fault}, ${timeout} s`);
+  }));
+});
+
+test('consensus: the cut-off minority cannot write under the majority rule', () => {
+  csRuns({ fault: 'partition', rule: 'majority', timeout: 3 }).forEach((r) => {
+    assert.ok(r.stats.gap1 >= 15, `client 1 waits out the partition (${r.stats.gap1} s)`);
+    assert.ok(r.stats.gap2 <= 5, `client 2's side elects a new leader (${r.stats.gap2} s)`);
+  });
+});
+
+test('consensus: a timeout shorter than a stall votes out healthy leaders; a long one slows failover', () => {
+  assert.ok(csCount({ fault: 'slow', rule: 'majority', timeout: 1 }, 'flaps') > 50);
+  assert.equal(csCount({ fault: 'slow', rule: 'majority', timeout: 3 }, 'flaps'), 0);
+  assert.equal(csCount({ fault: 'crash', rule: 'majority', timeout: 5 }, 'outage'), 100);
+  assert.equal(csCount({ fault: 'crash', rule: 'majority', timeout: 1 }, 'outage'), 0);
+});
+
 /* ---------- presets, predicts, challenges, card links ---------- */
 test('every lab passes validation', () => {
   assert.ok(DDIA.labs.length >= 2);
@@ -595,7 +632,7 @@ test('every card lab link points at a real lab and preset', () => {
   DDIA.chapter = (def) => def.cards.forEach((c, i) => { if (c.lab) links.push({ where: `ch${def.id}/${i + 1}`, lab: c.lab }); });
   for (const n of ['03', '05', '06', '07', '08', '09', '11']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
   DDIA.chapter = saved;
-  assert.ok(links.length >= 33, `expected at least 33 card links, found ${links.length}`);
+  assert.ok(links.length >= 36, `expected at least 36 card links, found ${links.length}`);
   links.forEach(({ where, lab }) => {
     const l = DDIA.lab.get(lab.id);
     assert.ok(l, `${where}: no lab ${lab.id}`);

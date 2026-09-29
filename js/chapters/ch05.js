@@ -320,6 +320,7 @@
       /* 4 ─────────────────────────────────────────────── */
       {
         title: 'Leader dies. Who takes over?',
+        lab: { id: 'consensus', preset: 'crash' },
         caption: 'Followers detect silence by timeout and promote the most up-to-date one. Too short a timeout fails over needlessly; an old leader returning causes split brain.',
         problem: 'Split brain, lost writes',
         fix: 'Epoch numbers fence the old leader',

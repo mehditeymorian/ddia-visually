@@ -1191,6 +1191,7 @@
       /* 13 ─────────────────────────────────────────────── */
       {
         title: 'Epochs and majorities stop split brain',
+        lab: { id: 'consensus', preset: 'split-brain' },
         caption: 'A leader must win a majority vote for a new epoch, then a majority for each value. Any two majorities overlap, so stale leaders get caught.',
         problem: 'Two leaders',
         fix: 'Epoch numbers + quorums',
@@ -1354,6 +1355,7 @@
       /* 14 ─────────────────────────────────────────────── */
       {
         title: 'Consensus has a price',
+        lab: { id: 'consensus', preset: 'flapping' },
         caption: 'Every decision waits for a majority vote, the voter set is fixed, and a jittery network can trap the cluster in endless elections.',
         problem: 'Slow, rigid, timeout-sensitive',
         fix: 'Use it only where agreement matters',
