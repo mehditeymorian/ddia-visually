@@ -47,6 +47,57 @@
     if (parent) parent.appendChild(el);
     return el;
   }
+  /* ---------- icons: one drawn set, 24px grid, 2px round stroke ---------- */
+  // Demos pass short glyphs (icon: '▶'); they resolve to these drawings so every
+  // control shares one stroke and weight instead of whatever the font draws.
+  const ICONS = {
+    play: '<path d="M7.5 5.2v13.6a.6.6 0 0 0 .9.5l10.6-6.8a.6.6 0 0 0 0-1L8.4 4.7a.6.6 0 0 0-.9.5z" fill="currentColor"/>',
+    step: '<path d="M6 5.6v12.8a.6.6 0 0 0 .9.5l9.2-6.4a.6.6 0 0 0 0-1L6.9 5.1a.6.6 0 0 0-.9.5z" fill="currentColor"/><path d="M19 5v14"/>',
+    pause: '<path d="M9 5.5v13M15 5.5v13"/>',
+    reset: '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/>',
+    refresh: '<path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1l2.6 2.6"/><path d="M20.5 3.5v5h-5"/>',
+    eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+    x: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    minus: '<path d="M5 12h14"/>',
+    pencil: '<path d="M16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1 1-4z"/><path d="M14.5 6.5l3 3"/>',
+    zap: '<path d="M13 2.5L4.5 13.5h6.5l-1 8 8.5-11h-6.5z"/>',
+    swap: '<path d="M4 8h15M15.5 4.5L19 8l-3.5 3.5"/><path d="M20 16H5M8.5 12.5L5 16l3.5 3.5"/>',
+    out: '<path d="M7 17L17 7M8.5 7H17v8.5"/>',
+    flag: '<path d="M5.5 21V4M5.5 4.5h11l-2.2 4 2.2 4h-11"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/>',
+    star: '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/>',
+    skip: '<path d="M5 5.6v12.8a.6.6 0 0 0 .9.5l9.2-6.4a.6.6 0 0 0 0-1L5.9 5.1a.6.6 0 0 0-.9.5z" fill="currentColor"/><path d="M19 5v14"/>',
+    grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    back: '<path d="M15 18l-6-6 6-6"/>',
+    target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/>',
+    list: '<path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.8" cy="6.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.8" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="4.8" cy="17.5" r="1.1" fill="currentColor" stroke="none"/>',
+  };
+  const GLYPH = {
+    '▶': 'play', '▷': 'play', '⏵': 'play', '↺': 'reset', '⟲': 'reset', '↻': 'refresh', '◉': 'eye', '✕': 'x', '×': 'x',
+    '＋': 'plus', '+': 'plus', '−': 'minus', '-': 'minus', '✎': 'pencil', '✱': 'zap', '⇄': 'swap', '↗': 'out',
+    '⚑': 'flag', '⚙': 'gear', '⏸': 'pause', '❚❚': 'pause', '★': 'star', '⇥': 'skip', '▦': 'grid', '✓': 'check', '◀': 'back',
+  };
+  /** An icon as an <svg> element, from a name ('play') or a demo glyph ('▶'). Unknown glyphs stay as text. */
+  function icon(name) {
+    const key = ICONS[name] ? name : GLYPH[String(name).trim()];
+    if (!key) return document.createTextNode(String(name));
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('class', 'vz-icon');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.innerHTML = ICONS[key];
+    return svg;
+  }
+  const icSpan = (glyph) => h('span', { class: 'ic', 'aria-hidden': 'true' }, icon(glyph));
+
   const kindOf = (k) => (KINDS.includes(k) ? k : 'neutral');
   const inkKind = (k) => (['muted', 'text', 'text2', 'accent'].includes(k) ? k : kindOf(k));
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -62,6 +113,8 @@
       h,
       s,
       KINDS,
+      /** Names the diagrams this scope draws, for screen readers (the card title). */
+      label: null,
       get alive() { return !disposed; },
       /** Resolves after ms unless the scope restarts/disposes first (then never resolves, halting the flow). */
       sleep(ms) {
@@ -146,7 +199,7 @@
           type: 'button',
           class: 'vz-btn' + (b.kind ? ' ' + b.kind : ''),
           onclick: () => b.onClick && b.onClick(btn),
-        }, b.icon ? h('span', { class: 'ic', 'aria-hidden': 'true' }, b.icon) : null, b.label);
+        }, b.icon ? icSpan(b.icon) : null, b.label);
         map[b.id || i] = btn;
         el.appendChild(btn);
       });
@@ -244,10 +297,11 @@
         const m = max || o.max || Math.max(1, ...items.map((i) => i.value));
         el.textContent = '';
         items.forEach((it) => {
-          const fill = h('div', { class: 'fill', style: { width: '0%' } });
+          const fill = h('div', { class: 'fill' });
           el.appendChild(h('div', { class: 'vz-bar' + (it.kind ? ' k-' + it.kind : '') },
             h('div', { class: 'lbl' }, it.label), h('div', { class: 'track' }, fill), h('div', { class: 'val' }, it.text != null ? it.text : fmt(it.value))));
-          requestAnimationFrame(() => { fill.style.width = Math.max(0, Math.min(100, (it.value / m) * 100)) + '%'; });
+          // reveal with clip-path rather than animating width (no layout work per frame)
+          requestAnimationFrame(() => { fill.style.clipPath = `inset(0 ${100 - Math.max(0, Math.min(100, (it.value / m) * 100))}% 0 0 round 6px)`; });
         });
       }
       update(o.items || []);
@@ -309,10 +363,10 @@
       const el = h('div', { class: 'vz-stepper' });
       const pos = h('span', { class: 'pos' });
       const pips = h('span', { class: 'pips', 'aria-hidden': 'true' }, o.steps.map(() => h('i')));
-      const bReset = h('button', { type: 'button', class: 'vz-btn ghost', title: 'Restart', onclick: () => { stop(); go(0, false); } }, '⟲');
-      const bPrev = h('button', { type: 'button', class: 'vz-btn', title: 'Previous step', onclick: () => { stop(); if (i > 0) go(i - 1, false); } }, '◀');
-      const bNext = h('button', { type: 'button', class: 'vz-btn primary', onclick: () => { stop(); if (i < n - 1) go(i + 1, true); } }, 'Next step ▶');
-      const bPlay = h('button', { type: 'button', class: 'vz-btn', onclick: () => (playing ? stop() : play()) }, '▷ Auto');
+      const bReset = h('button', { type: 'button', class: 'vz-btn ghost icon-only', title: 'Restart', 'aria-label': 'Restart', onclick: () => { stop(); go(0, false); } }, icSpan('reset'));
+      const bPrev = h('button', { type: 'button', class: 'vz-btn icon-only', title: 'Previous step', 'aria-label': 'Previous step', onclick: () => { stop(); if (i > 0) go(i - 1, false); } }, icSpan('back'));
+      const bNext = h('button', { type: 'button', class: 'vz-btn primary', onclick: () => { stop(); if (i < n - 1) go(i + 1, true); } }, icSpan('step'), 'Next step');
+      const bPlay = h('button', { type: 'button', class: 'vz-btn', 'aria-pressed': 'false', onclick: () => (playing ? stop() : play()) });
       el.append(bReset, bPrev, pos, bNext, bPlay, pips);
       parent.appendChild(el);
       const cap = o.caption === false ? null : v.caption(parent, '');
@@ -321,7 +375,9 @@
         pips.querySelectorAll('i').forEach((p, j) => p.classList.toggle('on', j <= i));
         bPrev.disabled = i === 0;
         bNext.disabled = i === n - 1;
-        bPlay.textContent = playing ? '❚❚ Pause' : '▷ Auto';
+        bPlay.textContent = '';
+        bPlay.append(icSpan(playing ? 'pause' : 'play'), playing ? 'Pause' : 'Auto-play');
+        bPlay.setAttribute('aria-pressed', playing ? 'true' : 'false');
       }
       async function go(j, animate) {
         v.restart();
@@ -365,7 +421,7 @@
       this.h = o.h || 320;
       this.id = 'vz' + ++uid;
       const wrap = h('div', { class: 'vz-svg-wrap' });
-      this.svg = s('svg', { viewBox: `0 0 ${this.w} ${this.h}`, class: 'vz-svg', role: 'img', 'aria-label': o.label || 'Diagram' });
+      this.svg = s('svg', { viewBox: `0 0 ${this.w} ${this.h}`, class: 'vz-svg', role: 'img', 'aria-label': o.label || (v.label ? 'Diagram: ' + v.label : 'Diagram') });
       if (o.maxWidth) this.svg.style.maxWidth = o.maxWidth + 'px';
       const defs = s('defs', null, this.svg);
       ['neutral', 'primary', 'good', 'bad', 'warn', 'info', 'data', 'ghost', 'muted', 'accent'].forEach((k) => {
@@ -696,5 +752,5 @@
     }
   }
 
-  DDIA.viz = { scope, h, s, speed: 1, Stage, VNode, VLink };
+  DDIA.viz = { scope, h, s, icon, speed: 1, Stage, VNode, VLink };
 })();

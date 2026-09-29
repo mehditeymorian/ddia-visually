@@ -207,27 +207,35 @@
     let asking = !!predict && prog.p[tab.id] == null && !Object.keys(q).length;
 
     const btn = (icon, label, kind, onclick, attrs) => h('button', Object.assign({ type: 'button', class: 'vz-btn' + (kind ? ' ' + kind : ''), onclick }, attrs || {}),
-      icon ? h('span', { class: 'ic', 'aria-hidden': 'true' }, icon) : null, label);
+      icon ? h('span', { class: 'ic', 'aria-hidden': 'true' }, DDIA.viz.icon(icon)) : null, label);
 
     /* ----- header + tabs ----- */
     const page = h('div', { class: 'lab', style: { '--pc': 'var(--lab)', '--pcbg': 'var(--lab-bg)' } });
+    const chNames = l.chapters.map((c) => 'Ch ' + c + (env.chapterTitle(c) ? ' ' + env.chapterTitle(c) : '')).join(', ');
     page.appendChild(h('div', { class: 'ch-head' },
-      h('div', { class: 'ch-badge lab-badge' }, env.icon('flask')),
+      h('div', { class: 'ch-badge lab-badge', 'aria-hidden': 'true' }, env.icon('flask')),
       h('div', { class: 'ch-titles' },
-        h('div', { class: 'ch-kicker' }, 'Playground · ' + l.chapters.map((c) => 'Ch ' + c).join(', ')),
         h('h1', { class: 'ch-title' }, l.title),
-        h('div', { class: 'ch-tagline' }, l.tagline))));
+        h('p', { class: 'ch-tagline' }, l.tagline, h('span', { class: 'ch-part' }, 'Playground · ' + chNames)))));
     const tabsEl = h('nav', { class: 'lab-tabs', 'aria-label': `${l.title}: presets and challenges` });
     function paintTabs() {
       tabsEl.textContent = '';
-      tabs.forEach((t, i) => {
-        if (t.kind === 'challenge' && tabs[i - 1].kind !== 'challenge') tabsEl.appendChild(h('span', { class: 'lab-tabs-sep' }, 'Challenges'));
-        const passed = t.kind === 'challenge' && prog.c[t.id];
-        tabsEl.appendChild(h('a', {
-          href: `#/lab/${l.id}/${t.id}`,
-          class: 'lab-tab' + (t.kind === 'challenge' ? ' ch' : '') + (t === tab ? ' current' : '') + (passed || (t.kind === 'preset' && prog.p[t.id] != null) ? ' done' : ''),
-          'aria-current': t === tab ? 'page' : null,
-        }, t.kind === 'challenge' ? '★ ' : '', t.title, passed ? h('span', { class: 'ok', 'aria-label': 'passed' }, ' ✓') : null));
+      // presets and challenges are two rows, each with its own name
+      [['preset', 'Presets'], ['challenge', 'Challenges']].forEach(([kind, name]) => {
+        const group = tabs.filter((t) => t.kind === kind);
+        if (!group.length) return;
+        const row = h('div', { class: 'lab-tab-row' + (kind === 'challenge' ? ' ch' : '') }, h('span', { class: 'lab-tabs-sep' }, name));
+        group.forEach((t) => {
+          const passed = t.kind === 'challenge' && prog.c[t.id];
+          const tried = t.kind === 'preset' && prog.p[t.id] != null;
+          row.appendChild(h('a', {
+            href: `#/lab/${l.id}/${t.id}`,
+            class: 'lab-tab' + (t.kind === 'challenge' ? ' ch' : '') + (t === tab ? ' current' : '') + (passed || tried ? ' done' : ''),
+            'aria-current': t === tab ? 'page' : null,
+          }, t.kind === 'challenge' ? h('span', { class: 'ic', 'aria-hidden': 'true' }, DDIA.viz.icon('star')) : null, t.title,
+            passed ? h('span', { class: 'ok' }, DDIA.viz.icon('check'), h('span', { class: 'sr-only' }, ' (passed)')) : null));
+        });
+        tabsEl.appendChild(row);
       });
     }
     paintTabs();
@@ -237,7 +245,7 @@
 
     /* ----- intro: nudge (preset) or goal + fixed settings (challenge) ----- */
     if (isCh) {
-      card.appendChild(h('div', { class: 'lab-goal' }, h('b', null, '★ Challenge. '), tab.goal));
+      card.appendChild(h('div', { class: 'lab-goal' }, h('span', { class: 'ic', 'aria-hidden': 'true' }, DDIA.viz.icon('star')), h('p', null, h('b', null, 'Challenge. '), tab.goal)));
       const fixed = [];
       l.knobs.forEach((k) => {
         if (editable(k.id)) return;
@@ -246,9 +254,10 @@
       });
       if (l.slots && !editable('slots')) fixed.push(`${l.slots.label}: ` + cfg.slots.map((sv) => (l.slots.states.find((x) => x.value === sv) || { label: sv }).label).join(', '));
       if (fixed.length) card.appendChild(h('div', { class: 'lab-fixed' }, h('span', { class: 'lbl' }, 'Fixed'), fixed.join(' · ')));
-    } else {
-      card.appendChild(h('div', { class: 'lab-nudge' }, env.icon('bulb'), h('span', null, tab.nudge)));
     }
+    // the nudge often names the answer, so it waits until the prediction is in
+    const nudgeEl = isCh ? null : h('div', { class: 'lab-nudge' }, env.icon('bulb'), h('span', null, tab.nudge));
+    if (nudgeEl) card.appendChild(nudgeEl);
 
     /* ----- predict-before-you-run ----- */
     const predictEl = h('div', { class: 'lab-predict' });
@@ -258,6 +267,7 @@
     function paintPredict(reveal) {
       // while the question is open, nothing may reveal the outcome
       peekers.forEach((b) => { b.disabled = asking; b.title = asking ? 'Predict first' : ''; });
+      if (nudgeEl) nudgeEl.hidden = asking;
       if (allOpen && asking) allOpen = false;
       paintAll();
       predictEl.textContent = '';
@@ -277,10 +287,10 @@
         const r = predictRes();
         const ok = reveal.a === r.answer;
         predictEl.className = 'lab-predict lab-reveal ' + (ok ? 'k-good' : 'k-bad');
-        predictEl.append(h('b', null, ok ? '✓ Right. ' : '✗ Not quite. '), `${optLabels[r.answer]}: ${countText(r)}. `,
+        predictEl.append(h('b', null, DDIA.viz.icon(ok ? 'check' : 'x'), ok ? 'Right. ' : 'Not quite. '), `${optLabels[r.answer]}: ${countText(r)}. `,
           predict.config ? 'The knobs are now set that way. ' : '', askAgainBtn());
       } else if (saved && saved.a >= 0) {
-        predictEl.append(h('span', { class: 'lab-predict-mini' }, `You predicted “${optLabels[saved.a]}” ${saved.ok ? '✓' : '✗'}. Answer: ${optLabels[predictRes().answer]}, ${countText(predictRes())}.`), ' ', askAgainBtn());
+        predictEl.append(h('span', { class: 'lab-predict-mini' }, `You predicted “${optLabels[saved.a]}” and ${saved.ok ? 'were right' : 'missed'}. Answer: ${optLabels[predictRes().answer]}, ${countText(predictRes())}.`), ' ', askAgainBtn());
       } else {
         predictEl.append(h('span', { class: 'lab-predict-mini' }, predict.q), ' ', askAgainBtn('Predict'));
       }
@@ -302,6 +312,7 @@
       paintTabs();
       if (env.onProgress) env.onProgress();
       paintPredict({ a: i });
+      paintKnobs();
       if (predict.config) { cfg = configFor(l, cfg, predict.config); paintKnobs(); }
       changed();
     }
@@ -309,6 +320,7 @@
       if (prog.p[tab.id] == null) { prog.p[tab.id] = { a: -1 }; env.save(); }
       asking = false;
       paintPredict();
+      paintKnobs();
       changed();
     }
     card.appendChild(predictEl);
@@ -326,6 +338,10 @@
       pace: (ms) => ms / speed,
     };
 
+    /* ----- knobs sit right under the stage they change (at most 3 per tab, the rest behind "More knobs") ----- */
+    const knobsEl = h('div', { class: 'lab-knobs' });
+    card.appendChild(knobsEl);
+
     /* ----- run bar ----- */
     const inputEl = h('span', { class: 'lab-input' });
     const speedSeg = h('div', { class: 'vz-seg lab-speed', role: 'group', 'aria-label': 'Speed' });
@@ -335,7 +351,7 @@
     };
     paintSpeed();
     const peekers = [
-      btn('▶', 'Replay', 'primary', () => play(true)),
+      btn('▶', 'Replay', isCh ? '' : 'primary', () => play(true)),
       btn('⇥', 'Skip to end', '', () => play(false)),
       btn('⇄', l.nextLabel || 'Next run', '', () => { input = l.nextInput(cfg, input); changed({ keepCheck: true }); }),
     ];
@@ -345,8 +361,11 @@
       speedSeg, inputEl));
 
     /* ----- readouts ----- */
-    const readouts = h('div', { class: 'lab-readouts', 'aria-live': 'polite' });
+    const readouts = h('div', { class: 'lab-readouts' });
+    // screen readers hear the verdict once per run, not every stat on every repaint
+    const announce = h('div', { class: 'sr-only', role: 'status' });
     card.appendChild(readouts);
+    card.appendChild(announce);
     function paintReadouts(stats) {
       readouts.textContent = '';
       if (!stats) {
@@ -356,6 +375,7 @@
       }
       const c = l.classify(stats, cfg);
       readouts.appendChild(h('span', { class: 'lab-verdict k-' + c.kind }, c.label));
+      announce.textContent = `${l.inputLabel(input)}: ${c.label}.`;
       l.metrics.forEach((m) => {
         const val = stats[m.id];
         const kind = m.plain ? '' : val > 0 ? m.kind : 'good';
@@ -363,16 +383,13 @@
       });
     }
 
-    /* ----- knobs (at most 3 per tab, the rest behind "More knobs") ----- */
-    const knobsEl = h('div', { class: 'lab-knobs' });
-    card.appendChild(knobsEl);
     function knobRow(k) {
       return h('div', { class: 'lab-knob' },
         h('span', { class: 'lab-knob-label' }, k.label),
         h('div', { class: 'vz-seg', role: 'group', 'aria-label': k.label }, k.options.map((o) => {
           const on = cfg[k.id] === o.value;
           const off = l.disabled ? l.disabled(cfg, k.id, o.value) : false;
-          return h('button', { type: 'button', class: on ? 'on' : '', 'aria-pressed': on ? 'true' : 'false', disabled: off && !on ? true : null, onclick: () => { if (!on) setCfg({ [k.id]: o.value }); } }, o.label);
+          return h('button', { type: 'button', class: on ? 'on' : '', 'aria-pressed': on ? 'true' : 'false', disabled: (off && !on) || asking ? true : null, onclick: () => { if (!on) setCfg({ [k.id]: o.value }); } }, o.label);
         })));
     }
     function paintKnobs() {
@@ -384,12 +401,14 @@
         const rest = l.knobs.filter((k) => !mine.includes(k.id));
         if (rest.length) {
           knobsEl.appendChild(h('button', { type: 'button', class: 'lab-textbtn lab-more', 'aria-expanded': moreOpen ? 'true' : 'false', onclick: () => { moreOpen = !moreOpen; paintKnobs(); } },
-            moreOpen ? '− Fewer knobs' : `＋ More knobs (${rest.length})`));
+            h('span', { class: 'ic', 'aria-hidden': 'true' }, DDIA.viz.icon(moreOpen ? 'minus' : 'plus')), moreOpen ? 'Fewer knobs' : `More knobs (${rest.length})`));
           if (moreOpen) rest.forEach((k) => knobsEl.appendChild(knobRow(k)));
         }
       }
       if (l.slots && editable('slots') && l.slots.hint) knobsEl.appendChild(h('div', { class: 'lab-knob-hint' }, l.slots.hint));
       if (!knobsEl.childNodes.length) knobsEl.hidden = true;
+      else if (asking) knobsEl.appendChild(h('div', { class: 'lab-knob-hint lab-locked' }, 'The knobs unlock once you answer or skip the prediction.'));
+      knobsEl.classList.toggle('locked', asking);
     }
     paintKnobs();
 
@@ -401,16 +420,17 @@
       const scopeAll = tab.criteria.some((c) => c.scope !== 'current');
       checkEl.appendChild(h('div', { class: 'lab-check-head' },
         btn('✓', scopeAll ? `Test my design (${n} ${many})` : 'Test my design', 'primary', runCheck),
-        prog.c[tab.id] && !checkRes ? h('span', { class: 'lab-passed' }, '★ passed before') : null));
+        prog.c[tab.id] && !checkRes ? h('span', { class: 'lab-passed' }, DDIA.viz.icon('star'), 'Passed before') : null));
       const list = h('ul', { class: 'lab-criteria' });
       tab.criteria.forEach((c, i) => {
         const r = checkRes && checkRes.results[i];
         list.appendChild(h('li', { class: r ? (r.ok ? 'ok' : 'no') : '' },
-          h('span', { class: 'mark', 'aria-hidden': 'true' }, r ? (r.ok ? '✓' : '✕') : '○'),
+          h('span', { class: 'mark', 'aria-hidden': 'true' }, r ? DDIA.viz.icon(r.ok ? 'check' : 'x') : h('i', { class: 'mark-open' })),
+          r ? h('span', { class: 'sr-only' }, r.ok ? 'Passes: ' : 'Fails: ') : null,
           h('span', null, h('b', null, c.label), r && r.text ? h('span', { class: 'why' }, ' · ' + r.text) : null)));
       });
       checkEl.appendChild(list);
-      if (checkRes && checkRes.ok) checkEl.appendChild(h('div', { class: 'lab-reveal k-good' }, h('b', null, '★ Challenge passed. '), 'Your design holds up.'));
+      if (checkRes && checkRes.ok) checkEl.appendChild(h('div', { class: 'lab-reveal k-good', role: 'status' }, h('b', null, 'Challenge passed. '), 'Your design holds up.'));
       const fail = checkRes && checkRes.results.find((r) => !r.ok && r.failInput != null);
       if (fail) checkEl.appendChild(btn('◉', `Show a failing ${one}`, 'danger', () => { input = clone(fail.failInput); changed({ keepCheck: true }); }));
       if (tab.hint) checkEl.appendChild(h('details', { class: 'lab-hint' }, h('summary', null, 'Hint'), h('p', null, tab.hint)));
@@ -466,7 +486,7 @@
       if (isCh) paintCheck();
       if (allOpen) paintAll();
       syncHash();
-      if (asking) { asking = false; paintPredict(); }
+      if (asking) { asking = false; paintPredict(); paintKnobs(); }
       play(true);
     }
     function syncHash() {
@@ -480,7 +500,7 @@
     function showError(err) {
       console.error(`Lab ${l.id} failed:`, err);
       stage.textContent = '';
-      stage.appendChild(h('div', { class: 'demo-error' }, `This lab failed to run: ${err && err.message}`));
+      stage.appendChild(DDIA.demoError ? DDIA.demoError('This lab failed to run.', err) : h('div', { class: 'demo-error' }, `This lab failed to run: ${err && err.message}`));
     }
     function compute() {
       try { result = l.run(cfg, input); return true; } catch (err) { showError(err); return false; }
@@ -489,7 +509,7 @@
       if (!view) return;
       v.restart();
       if (!compute()) return;
-      inputEl.textContent = l.inputLabel(input);
+      inputEl.textContent = 'Showing ' + l.inputLabel(input);
       paintReadouts(null);
       let p;
       try { p = view.render(result, cfg, input, { animate }); } catch (err) { showError(err); return; }
@@ -500,7 +520,7 @@
       if (!view) return;
       v.restart();
       if (!compute()) return;
-      inputEl.textContent = l.inputLabel(input);
+      inputEl.textContent = 'Showing ' + l.inputLabel(input);
       paintReadouts(null);
       try { view.render(result, cfg, input, { preview: true }); } catch (err) { showError(err); }
     }
@@ -518,7 +538,7 @@
     const { h } = DDIA.viz;
     const wrap = h('div', { class: 'lab-hub', style: { '--pc': 'var(--lab)', '--pcbg': 'var(--lab-bg)' } });
     wrap.appendChild(h('section', { class: 'lab-hero' },
-      h('div', { class: 'ch-badge lab-badge' }, env.icon('flask')),
+      h('div', { class: 'ch-badge lab-badge', 'aria-hidden': 'true' }, env.icon('flask')),
       h('div', null,
         h('h1', { html: 'The <em>Playground</em>' }),
         h('p', null, 'Labs where you turn the knobs. Each opens ready to run: predict, change one thing, and watch what breaks.'))));
@@ -526,13 +546,16 @@
     labs.forEach((l) => {
       const prog = env.progress(l.id);
       const done = l.challenges.filter((c) => prog.c[c.id]).length;
+      const tried = l.presets.filter((t) => prog.p[t.id] != null).length;
       grid.appendChild(h('a', { class: 'lab-tile', href: `#/lab/${l.id}` },
-        h('h3', null, l.title),
-        h('p', null, l.tagline),
-        h('div', { class: 'chips' },
-          l.chapters.map((c) => h('span', { class: 'chip tag' }, `Ch ${c} · ${env.chapterTitle(c) || ''}`)),
-          (l.styles || []).map((s) => h('span', { class: 'chip style' }, s))),
-        h('div', { class: 'meta' }, `${l.presets.length} presets · ${done} of ${l.challenges.length} challenges passed`)));
+        l.thumb ? h('span', { class: 'lab-thumb', 'aria-hidden': 'true', html: l.thumb }) : null,
+        h('span', { class: 'lab-tile-body' },
+          h('h2', null, l.title),
+          h('p', null, l.tagline),
+          h('span', { class: 'lab-tile-ch' }, l.chapters.map((c) => `Chapter ${c}${env.chapterTitle(c) ? ': ' + env.chapterTitle(c) : ''}`).join(' · ')),
+          h('span', { class: 'meta' },
+            h('span', null, `${l.presets.length} presets`, tried ? ` · ${tried} tried` : ''),
+            h('span', { class: done ? 'won' : '' }, `${done} of ${l.challenges.length} challenges passed`)))));
     });
     wrap.appendChild(grid);
     wrap.appendChild(h('p', { class: 'lab-hub-foot' }, 'Each lab is a small simulation. The same model draws the animation, answers your predictions and grades the challenges, so they always agree.'));
@@ -548,8 +571,8 @@
     let sel = null;
     let refocus = false;
     const strip = h('div', { class: 'lab-order-strip', role: 'group', 'aria-label': 'Order of steps' });
-    const earlier = h('button', { type: 'button', class: 'vz-btn', onclick: () => move(-1) }, h('span', { class: 'ic', 'aria-hidden': 'true' }, '◀'), 'Earlier');
-    const later = h('button', { type: 'button', class: 'vz-btn', onclick: () => move(1) }, 'Later', h('span', { class: 'ic', 'aria-hidden': 'true' }, '▶'));
+    const earlier = h('button', { type: 'button', class: 'vz-btn', onclick: () => move(-1) }, h('span', { class: 'ic', 'aria-hidden': 'true' }, DDIA.viz.icon('back')), 'Earlier');
+    const later = h('button', { type: 'button', class: 'vz-btn', onclick: () => move(1) }, 'Later', h('span', { class: 'ic flip', 'aria-hidden': 'true' }, DDIA.viz.icon('back')));
     const hint = h('span', { class: 'lab-order-hint' });
     const el = h('div', { class: 'lab-order' },
       h('div', { class: 'lab-order-head' }, h('span', { class: 'lab-order-title' }, 'Order of steps'), hint),

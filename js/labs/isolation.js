@@ -355,6 +355,8 @@
     tagline: 'Race two transactions, then change the isolation level',
     chapters: [7],
     styles: ['timeline', 'knobs', 'challenges'],
+    // hub thumbnail: two transactions interleaving as time flows down
+    thumb: '<svg viewBox="0 0 200 110"><path d="M16 12v86" stroke="var(--text-3)" stroke-width="1.6" stroke-linecap="round" fill="none"/><path d="M12 92l4 6 4-6" stroke="var(--text-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/><rect x="30" y="14" width="72" height="18" rx="6" fill="var(--k-primary-f)" stroke="var(--k-primary-s)" stroke-width="1.6"/><text x="66" y="26.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-primary-i)">T1 read</text><rect x="108" y="36" width="72" height="18" rx="6" fill="var(--k-data-f)" stroke="var(--k-data-s)" stroke-width="1.6"/><text x="144" y="48.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-data-i)">T2 read</text><rect x="30" y="58" width="72" height="18" rx="6" fill="var(--k-primary-f)" stroke="var(--k-primary-s)" stroke-width="1.6"/><text x="66" y="70.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-primary-i)">T1 write</text><rect x="108" y="80" width="72" height="18" rx="6" fill="var(--k-data-f)" stroke="var(--k-data-s)" stroke-width="1.6"/><text x="144" y="92.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-data-i)">T2 write</text><rect x="108" y="100" width="72" height="0" /></svg>',
     knobs: [
       { id: 'iso', label: 'Isolation level', options: LEVELS.map((l) => ({ value: l, label: LEVEL_LABEL[l] })) },
       { id: 'lock', label: 'Lock rows I read', options: [{ value: 'off', label: 'Off' }, { value: 'rows', label: 'FOR UPDATE' }] },
@@ -380,7 +382,7 @@
     nextLabel: 'Random order',
     inputKey: (o) => o.join(''),
     parseInput,
-    inputLabel: (o) => 'order ' + o.join(''),
+    inputLabel: (o) => 'order ' + o.map((t) => 'T' + t).join(' '),
     sampleNoun: ['order', 'orders'],
 
     metrics: [
