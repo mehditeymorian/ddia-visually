@@ -10,7 +10,7 @@ Reading 500 pages of dense text isn't for everyone. Here every idea from the boo
 
 - **11 chapters, 143 interactive cards.** Each card holds one idea, one live diagram, and one line of text.
 - **Break it, then fix it.** Most cards let you trigger the problem (split brain, write skew, lost updates, clock skew…) and then apply the solution.
-- **A playground of labs.** Set the knobs yourself: tune quorums and break replicas, or race two transactions under five isolation levels. Every preset asks you to predict first, and challenges grade your design against every possible run. Related cards link straight into the lab.
+- **A playground of labs.** Set the knobs yourself: tune quorums and break replicas, race two transactions under five isolation levels, or place keys on nodes and add a node. Each lab opens on a menu of scenarios. Every scenario asks you to predict first, and challenges grade your design against every run, with a solution after two tries. Related cards link straight into the lab.
 - **A cheat sheet and a 5-question quiz** at the end of every chapter.
 - **Search** any concept (press `/` or `⌘K` / `Ctrl+K`) to jump straight to the card that explains it.
 - **Jump anywhere:** the sidebar lists every chapter, and every card of the chapter you are in. **← →** keys step through cards.
@@ -43,6 +43,7 @@ css/app.css           theme tokens (light/dark), layout, diagram styles
 js/viz.js             the small visualization kit every chapter uses
 js/sim.js             deterministic, seeded event simulator used by the labs
 js/lab.js             playground: lab registry, bounding rules, lab pages, hub
+js/lab-nav.js         playground: scenario cards, lab overview and the strip above the model
 js/app.js             router, contents, search, card view, cheat sheets, quizzes, progress
 js/chapters/chNN.js   one file per chapter
 js/labs/<id>.js       one file per playground lab
