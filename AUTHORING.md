@@ -42,6 +42,8 @@ DDIA.chapter({
 }
 ```
 
+Optional: `lab: { id, preset, set }` links the card to a playground lab preset and shows a "Try it yourself" button. See [LABS.md](LABS.md).
+
 Every card **must** have a `demo`, and every demo **must** be interactive: it needs at least one control (button, segmented switch, slider, toggle, or stepper). "Break it, then fix it" is the house style. Let the user trigger the problem, then switch on the fix and replay.
 
 ## Semantic colors (`kind`)
