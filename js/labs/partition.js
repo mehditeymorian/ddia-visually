@@ -16,6 +16,7 @@
   const SENSORS = 8;
   const HOT = 1.5;         // a node is hot above 1.5× its fair share of a phase's writes
   const ANIMATED = 12;     // writes that fly one by one; the rest land in batches
+  const READ_FROM = 2000, READ_TO = 2399; // the users range read
   const PLACE_LABEL = { range: 'Key range', hash: 'Hash, 24 partitions', mod: 'Hash mod N', compound: 'Compound key' };
   const PLACE_RULE = {
     range: 'Key range: each partition owns a slice of sorted keys',
@@ -82,6 +83,12 @@
     return took;
   }
 
+  // a phase is hot when its busiest node took more than HOT × its fair share of the phase's writes
+  function verdict(ph) {
+    const top = Math.max(...ph.load);
+    return { hot: top / ph.total > HOT / ph.n ? 1 : 0, node: ph.load.indexOf(top), share: top / ph.total };
+  }
+
   function run(cfg, seed) {
     const rng = DDIA.sim.rng(seed);
     const writes = workload(cfg, rng);
@@ -94,6 +101,7 @@
     let moved = 0;
     writes.forEach((w, i) => {
       if (i === HALF && cfg.grow === 'add') {
+        const first = verdict(phases[0]);
         const keys = [...stored.values()];
         const before = keys.map(nodeOf);
         const took = cfg.place === 'mod' ? null : grow(owner, n);
@@ -109,7 +117,7 @@
         });
         moved = keys.length ? Math.round((m / keys.length) * 100) : 0;
         trace.push({
-          type: 'join', node: n - 1, took, moved, owner: owner.slice(),
+          type: 'join', node: n - 1, took, moved, owner: owner.slice(), before: first,
           flows: [...flows].map(([k, c]) => { const [from, to] = k.split('>').map(Number); return { from, to, keys: c }; }),
         });
         phases.push({ n, load: Array(n).fill(0), total: 0 });
@@ -134,25 +142,24 @@
       const local = cfg.place === 'range' || cfg.place === 'compound';
       nodes = local ? [...new Set([...stored.values()].filter((w) => w.sensor === 3).map(nodeOf))] : all;
     } else {
-      label = 'users 2000–2399';
-      short = 'read 2000–2399';
+      label = `users ${READ_FROM}–${READ_TO}`;
+      short = `read ${READ_FROM}–${READ_TO}`;
       if (cfg.place === 'range') {
         const set = new Set();
-        for (let p = Math.floor(0.2 * P); p <= Math.floor(0.2399 * P); p++) set.add(owner[p]);
+        for (let p = Math.floor((READ_FROM / 10000) * P); p <= Math.floor((READ_TO / 10000) * P); p++) set.add(owner[p]);
         nodes = [...set];
       } else nodes = all;
     }
     nodes.sort((a, b) => a - b);
     trace.push({ type: 'read', label, short, nodes, of: n });
 
-    let hot = 0;
-    phases.forEach((ph) => { if (Math.max(...ph.load) / ph.total > HOT / ph.n) hot = 1; });
-    const last = phases[phases.length - 1];
-    const top = Math.max(...last.load);
-    trace.push({ type: 'done', hot, busiestNode: last.load.indexOf(top), load: last.load });
+    const verdicts = phases.map(verdict);
+    const last = verdicts[verdicts.length - 1];
+    const hot = verdicts.some((x) => x.hot) ? 1 : 0;
+    trace.push({ type: 'done', hot, last, load: phases[phases.length - 1].load });
     return {
       trace,
-      stats: { hot, massMove: moved > 50 ? 1 : 0, scatter: nodes.length === n ? 1 : 0, busiest: Math.round((top / last.total) * 100), moved },
+      stats: { hot, massMove: moved > 50 ? 1 : 0, scatter: nodes.length === n ? 1 : 0, busiest: Math.round(last.share * 100), moved },
     };
   }
 
@@ -212,9 +219,11 @@
       if (!LOADS.includes(c.load)) c.load = 'users';
       c.nodes = Number(c.nodes) === 3 ? 3 : 4;
       if (!['none', 'add'].includes(c.grow)) c.grow = 'none';
-      if (!['off', 'suffix'].includes(c.salt)) c.salt = 'off';
+      // the suffix only splits the celebrity key, so other workloads keep keys as they are
+      if (!['off', 'suffix'].includes(c.salt) || c.load !== 'celebrity') c.salt = 'off';
       return c;
     },
+    disabled: (cfg, knob, value) => knob === 'salt' && value === 'suffix' && cfg.load !== 'celebrity',
     describe: (cfg) => `${PLACE_LABEL[cfg.place]}, N = ${cfg.nodes}`,
 
     run,
@@ -253,7 +262,7 @@
         id: 'hash-scatter', title: 'Hashing scatters ranges',
         blurb: 'Even spread, but what happens to a range read?',
         config: { load: 'users', place: 'hash', nodes: 4 }, knobs: ['place'],
-        nudge: 'Compare key range: the same read asks one or two nodes.',
+        nudge: 'Compare key range: the same read asks just two nodes.',
         predict: { q: 'Users hashed into 24 partitions. Will reading users 2000–2399 ask every node?', metric: 'scatter' },
       },
       {
@@ -324,7 +333,7 @@
     view,
   });
 
-  /* ---------- view: the app sends keys to node rows; bars show each node's share of writes ---------- */
+  /* ---------- view: the app sends keys to node rows; bars fill with each node's share of the phase ---------- */
   const BAR_X = 350, BAR_W = 150;
   function view(el, v, api) {
     const box = v.wrap(el);
@@ -345,13 +354,13 @@
       app = st.node({ x: 62, y: 150, w: 56, h: 56, shape: 'person', label: 'App', kind: 'data' });
       // left-aligned under the app so long sensor keys stay inside the stage and clear of the rows
       ticker = st.text(10, 222, ' ', { size: 14, mono: true, kind: 'text2', anchor: 'start' });
-      counter = st.text(10, 250, '', { size: 13, kind: 'muted', mono: true, anchor: 'start' });
+      counter = st.text(10, 250, '', { size: 14, kind: 'muted', mono: true, anchor: 'start' });
       rows = [];
       bars = [];
       pcts = [];
       for (let k = 0; k < cfg.nodes; k++) addRow(k, cfg);
       threshold = st.line(BAR_X, 52, BAR_X, 290, { kind: 'bad', dashed: true, width: 1.5 });
-      thLabel = st.text(BAR_X, 44, 'hot above', { size: 13, kind: 'bad', anchor: 'middle' });
+      thLabel = st.text(BAR_X, 44, 'hot above', { size: 14, kind: 'bad', anchor: 'middle' });
       moveThreshold(cfg.nodes);
     }
     function addRow(k, cfg, fresh) {
@@ -371,22 +380,23 @@
       if (cfg.place === 'mod') rows[k].set({ sub: `hash mod N = ${k}` });
       else if (owner) rows[k].set({ sub: `${owner.filter((o) => o === k).length} partitions` });
     }
-    function paintLoad(load, total, n) {
+    // Bars fill toward the whole phase (240 or 480 writes), so they only ever grow: a bar that crosses
+    // the line is a hot spot at the end too, and the animation can never disagree with the verdict.
+    function paintLoad(load, n, size) {
       for (let k = 0; k < n; k++) {
-        const share = total ? load[k] / total : 0;
-        // a handful of writes proves nothing: only a filled-in phase can turn a bar red
-        bars[k].set({ w: Math.max(0, BAR_W * Math.min(1, share)), kind: total >= 48 && share > HOT / n ? 'bad' : 'data' });
+        const share = load[k] / size;
+        bars[k].set({ w: BAR_W * Math.min(1, share), kind: share > HOT / n ? 'bad' : 'data' });
         pcts[k].set(`${Math.round(share * 100)}%`);
       }
     }
-    function logWrite(e, cfg) {
+    function logWrite(e) {
       log.add(e.part == null ? `${e.key} → node ${e.node + 1}` : `${e.key} → P${e.part + 1} → node ${e.node + 1}`, 'info');
     }
     function logJoin(e) {
-      if (e.took) {
-        const parts = e.took.map((t) => 'P' + (t.part + 1));
-        log.add(`Node ${e.node + 1} joins and takes ${parts.length} partitions: ${e.moved}% of keys move`, e.moved > 50 ? 'warn' : 'good');
-      } else log.add(`Node ${e.node + 1} joins: hash mod N changes, ${e.moved}% of keys move`, e.moved > 50 ? 'warn' : 'good');
+      if (e.before.hot) log.add(`Before the join, node ${e.before.node + 1} was a hot spot`, 'bad');
+      const tone = e.moved > 50 ? 'warn' : 'good';
+      if (e.took) log.add(`Node ${e.node + 1} joins and takes ${e.took.map((t) => 'P' + (t.part + 1)).join(', ')}: ${e.moved}% of keys move`, tone);
+      else log.add(`Node ${e.node + 1} joins: hash mod N changes, ${e.moved}% of keys move`, tone);
     }
     function logRead(e) {
       const every = e.nodes.length === e.of;
@@ -394,10 +404,10 @@
     }
     function finish(e) {
       counter.set(`${WRITES} writes, done`);
-      if (e.hot) {
-        rows[e.busiestNode].set({ kind: 'bad', sub: 'hot spot' });
-        log.add(`Node ${e.busiestNode + 1} is a hot spot: more than ${HOT}× its fair share`, 'bad');
-      } else log.add(`No hot spot: every node stays under ${HOT}× its fair share`, 'good');
+      if (e.last.hot) {
+        rows[e.last.node].set({ kind: 'bad', sub: 'hot spot' });
+        log.add(`Node ${e.last.node + 1} is a hot spot: more than ${HOT}× its fair share`, 'bad');
+      } else if (!e.hot) log.add(`No hot spot: every node stays under ${HOT}× its fair share`, 'good');
     }
 
     function render(result, cfg, input, o) {
@@ -419,7 +429,7 @@
           for (let k = 0; k < n; k++) subFor(k, cfg, join.owner);
         }
         const done = trace[trace.length - 1];
-        paintLoad(done.load, done.load.reduce((a, b) => a + b, 0), n);
+        paintLoad(done.load, n, done.load.reduce((a, b) => a + b, 0));
         const read = trace.find((e) => e.type === 'read');
         if (join) logJoin(join);
         logRead(read);
@@ -430,14 +440,13 @@
     }
 
     async function animate(trace, cfg) {
+      const size = cfg.grow === 'add' ? HALF : WRITES; // writes per phase
       let n = cfg.nodes;
       let load = Array(n).fill(0);
-      let total = 0;
       let flown = 0;
       let batch = 0;
       let quiet = 0; // writes landed in batches since the last log line
       const logQuiet = () => { if (quiet) log.add(`…and ${quiet} more writes`, 'info'); quiet = 0; };
-      const writes = (e) => { load[e.node]++; total++; };
       for (const e of trace) {
         if (e.type === 'write') {
           counter.set(`write ${e.i + 1} of ${WRITES}`);
@@ -445,39 +454,49 @@
             flown++;
             ticker.set(e.key);
             await st.send(app, rows[e.node], { label: e.part == null ? '' : 'P' + (e.part + 1), kind: 'data', dur: api.pace(520) });
-            writes(e);
-            paintLoad(load, total, n);
-            logWrite(e, cfg);
+            load[e.node]++;
+            paintLoad(load, n, size);
+            logWrite(e);
           } else {
-            writes(e);
+            load[e.node]++;
             quiet++;
             if (++batch % 24 === 0) {
               ticker.set(e.key);
-              paintLoad(load, total, n);
+              paintLoad(load, n, size);
               await v.sleep(api.pace(60));
             }
           }
         } else if (e.type === 'join') {
-          paintLoad(load, total, n);
+          paintLoad(load, n, size);
           logQuiet();
           addRow(e.node, cfg, true);
           n++;
           moveThreshold(n);
           logJoin(e);
-          // whole partitions fly to the new node; hash mod N reshuffles keys between many pairs
-          const flights = e.took
-            ? e.took.map((t) => st.send(rows[t.from], rows[e.node], { label: 'P' + (t.part + 1), kind: 'info', dur: api.pace(900), curve: 30 }))
-            : e.flows.filter((f) => f.keys >= 4).map((f) => st.send(rows[f.from], rows[f.to], { label: `${f.keys} keys`, kind: 'warn', dur: api.pace(900), curve: 30 }));
+          let flights;
+          if (e.took) {
+            // whole partitions fly to the new node
+            flights = e.took.map((t) => st.send(rows[t.from], rows[e.node], { label: 'P' + (t.part + 1), kind: 'info', dur: api.pace(900), curve: 30 }));
+          } else {
+            // hash mod N reshuffles keys between almost every pair: one packet per destination, from its biggest donor
+            const into = new Map();
+            e.flows.forEach((f) => {
+              const d = into.get(f.to) || { keys: 0, from: f.from, most: 0 };
+              d.keys += f.keys;
+              if (f.keys > d.most) { d.most = f.keys; d.from = f.from; }
+              into.set(f.to, d);
+            });
+            flights = [...into].map(([to, d]) => st.send(rows[d.from], rows[to], { label: `${d.keys} keys`, kind: 'warn', dur: api.pace(900), curve: 30 }));
+          }
           await Promise.all(flights);
           for (let k = 0; k < n; k++) subFor(k, cfg, e.owner);
-          // shares count again from here, so the new node has a fair start
+          // the bars count the second phase from zero, so the new node has a fair start
           load = Array(n).fill(0);
-          total = 0;
           flown = ANIMATED;
-          paintLoad(load, total, n);
+          paintLoad(load, n, size);
           await v.sleep(api.pace(300));
         } else if (e.type === 'read') {
-          paintLoad(load, total, n);
+          paintLoad(load, n, size);
           logQuiet();
           ticker.set(e.short);
           const every = e.nodes.length === e.of;
@@ -489,5 +508,5 @@
     return { render };
   }
 
-  DDIA.labs.partitionModel = { run, hash, P, WRITES, HALF, CELEB, HOT };
+  DDIA.labs.partitionModel = { run, hash, partOf, P, WRITES, HALF, CELEB, HOT };
 })();

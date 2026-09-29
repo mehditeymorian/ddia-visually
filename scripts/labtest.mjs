@@ -350,6 +350,47 @@ test('partition: a key-range read asks at most two nodes; hashing asks all', () 
   assert.equal(ptCount({ load: 'users', place: 'hash', nodes: 4 }, 'scatter'), 100);
 });
 
+test('partition: a join moves exactly the keys of the partitions the new node takes', () => {
+  const cfg = DDIA.lab.configFor(PT(), { load: 'users', place: 'hash', nodes: 4, grow: 'add' });
+  const { trace, stats } = PT().run(cfg, 9);
+  const join = trace.find((e) => e.type === 'join');
+  const counts = [0, 0, 0, 0, 0];
+  join.owner.forEach((o) => counts[o]++);
+  assert.ok(Math.max(...counts) - Math.min(...counts) <= 1, `partitions stay balanced: ${counts}`);
+  const taken = new Set(join.took.map((t) => t.part));
+  const keys = new Map();
+  trace.filter((e) => e.type === 'write' && e.i < DDIA.labs.partitionModel.HALF).forEach((e) => keys.set(e.key, e.part));
+  const expected = [...keys.values()].filter((part) => taken.has(part)).length;
+  assert.equal(stats.moved, Math.round((expected / keys.size) * 100));
+});
+
+test('partition: keys moved counts the celebrity key once, not once per write', () => {
+  const cfg = DDIA.lab.configFor(PT(), { load: 'celebrity', place: 'hash', nodes: 4, grow: 'add' });
+  PT().samples(cfg).forEach((seed) => assert.ok(PT().run(cfg, seed).stats.moved < 50));
+});
+
+test('partition: a bar that crosses the hot line mid-phase always ends hot', () => {
+  const { HALF, WRITES, HOT } = DDIA.labs.partitionModel;
+  const cfgs = PT().presets.concat(PT().challenges).flatMap((t) => [t.config, Object.assign({}, t.config, (t.solution || {}).config)]);
+  cfgs.forEach((c) => {
+    const cfg = DDIA.lab.configFor(PT(), c);
+    const size = cfg.grow === 'add' ? HALF : WRITES;
+    PT().samples(cfg).slice(0, 30).forEach((seed) => {
+      const { trace } = PT().run(cfg, seed);
+      let n = cfg.nodes;
+      let load = Array(n).fill(0);
+      let crossed = false;
+      const verdicts = [];
+      trace.forEach((e) => {
+        if (e.type === 'join') { verdicts.push([crossed, e.before.hot]); n++; load = Array(n).fill(0); crossed = false; }
+        if (e.type === 'write') { load[e.node]++; if (load[e.node] / size > HOT / n) crossed = true; }
+        if (e.type === 'done') verdicts.push([crossed, e.last.hot]);
+      });
+      verdicts.forEach(([c, hot]) => assert.equal(c, !!hot, `${JSON.stringify(c)} seed ${seed}`));
+    });
+  });
+});
+
 /* ---------- presets, predicts, challenges, card links ---------- */
 test('every lab passes validation', () => {
   assert.ok(DDIA.labs.length >= 2);
