@@ -54,10 +54,12 @@
     });
     // the store keeps them sorted by timestamp; the last one wins
     const sorted = writes.slice().sort((a, b) => (before(a.ts, b.ts) ? -1 : before(b.ts, a.ts) ? 1 : 0));
-    const lost = before(writes[1].ts, writes[0].ts) ? 1 : 0;                                   // Bob's reply sorts before its cause
-    const order = before(writes[2].ts, writes[1].ts) || before(writes[2].ts, writes[0].ts) ? 1 : 0; // Carol sorts before an earlier write
+    const lost = before(writes[1].ts, writes[0].ts) ? 1 : 0; // Bob's reply sorts before its cause
+    // real-time order: every write should sort after every write that finished before it started
+    const carolEarly = before(writes[2].ts, writes[1].ts) || before(writes[2].ts, writes[0].ts);
+    const order = lost || carolEarly ? 1 : 0;
     const final = sorted[2].value;
-    trace.push({ type: 'sort', order: sorted.map((w) => w.value), final, lost, broken: order });
+    trace.push({ type: 'sort', order: sorted.map((w) => w.value), final, lost, broken: carolEarly ? 1 : 0 });
     return { trace, stats: { lost, order, wait, final } };
   }
 
@@ -90,7 +92,10 @@
         s += `<path d="M${60 + i * 60} 30L${60 + i * 60 + 12 * Math.sin(a)} ${30 - 12 * Math.cos(a)}" stroke="var(--k-primary-s)" stroke-width="2.2" stroke-linecap="round"/>`;
         s += `<circle cx="${x}" cy="56" r="3" fill="var(--k-data-s)"/>`;
       });
-      const label = `${cfg.skew} ms skew, ${ORDER_LABEL[cfg.order].toLowerCase()}`;
+      // the writes under the clocks: bunched together when each follows at once, spread out a second apart
+      const gap = cfg.gap === 'fast' ? 8 : 30;
+      [0, 1, 2].forEach((k) => { s += `<rect x="${104 + (k - 1) * gap}" y="62" width="6" height="6" rx="1.5" fill="var(--k-info-s)"/>`; });
+      const label = `${cfg.skew} ms skew, ${{ wall: 'wall clock', lamport: 'Lamport clock', wait: 'commit wait' }[cfg.order]}`;
       return `<svg viewBox="0 0 240 84">${s}<text x="120" y="78" text-anchor="middle" font-size="15" font-weight="600" fill="var(--text-2)" style="font-family:var(--font-body)">${label}</text></svg>`;
     },
     knobs: [
@@ -154,7 +159,7 @@
       {
         id: 'lamport', title: 'Lamport clocks',
         blurb: 'Counters follow causes. Do they follow real time?',
-        config: { skew: 200, gap: 'fast', order: 'lamport' }, knobs: ['order', 'skew'],
+        config: { skew: 200, gap: 'fast', order: 'lamport' }, knobs: ['order', 'skew'], input: 6, // a run where Carol sorts early
         nudge: 'Bob is safe. Now watch where Carol’s later write lands.',
         predict: { q: 'Lamport counters: Carol writes after Bob but never saw him. Can she sort before him?', metric: 'order' },
       },
@@ -218,8 +223,9 @@
 
   /* ---------- view: three node lanes in real-time order, then the store's timestamp order ---------- */
   const LANE = { A: 78, B: 148, C: 218 };
-  const COL = [158, 238, 318];
+  const COL = [172, 252, 332]; // clear of the lane notes on the left and the sorted list on the right
   const SLOT = [96, 150, 204];
+  const SORTED = 492;
   const RULE = {
     wall: 'Last write wins, by wall-clock timestamp',
     lamport: 'Last write wins, by Lamport timestamp (counter, node)',
@@ -242,18 +248,19 @@
         st.text(10, y - 4, `Node ${w.node}`, { size: 14, anchor: 'start', weight: 700, kind: 'text2' });
         const note = cfg.order === 'lamport' ? `counter ${w.node === 'C' ? setup.prior : 0}` : `clock ${setup.err[w.node] >= 0 ? '+' : '−'}${Math.abs(setup.err[w.node])} ms`;
         st.text(10, y + 16, note, { size: 14, anchor: 'start', mono: true, kind: 'muted' });
-        st.line(110, y, 372, y, { width: 1.5, kind: 'muted' });
+        st.line(118, y, 386, y, { width: 1.5, kind: 'muted' });
       });
-      st.line(396, 44, 396, 262, { width: 1, kind: 'muted', dashed: true });
-      st.text(478, 58, 'Sorted by timestamp', { size: 14, weight: 700, kind: 'text2' });
-      SLOT.forEach((y, i) => st.text(414, y + 5, ['1st', '2nd', '3rd'][i], { size: 14, anchor: 'start', kind: 'muted', mono: true }));
-      verdict = st.text(478, 246, '', { size: 14, weight: 700, kind: 'good' });
-      verdict2 = st.text(478, 266, '', { size: 14, weight: 700, kind: 'bad' });
+      st.line(392, 44, 392, 262, { width: 1, kind: 'muted', dashed: true });
+      st.text(SORTED - 12, 58, 'Sorted by timestamp', { size: 14, weight: 700, kind: 'text2' });
+      SLOT.forEach((y, i) => st.text(400, y + 5, ['1st', '2nd', '3rd'][i], { size: 14, anchor: 'start', kind: 'muted', mono: true }));
+      verdict = st.text(SORTED - 12, 246, '', { size: 14, weight: 700, kind: 'good' });
+      verdict2 = st.text(SORTED - 12, 266, '', { size: 14, weight: 700, kind: 'bad' });
       chips = [];
     }
     function writeChip(e, cfg) {
-      const n = st.node({ x: COL[e.i], y: LANE[e.node], w: 104, h: 44, label: `${e.name}: x=${e.value}`, sub: e.label, kind: KIND[e.value], badge: cfg.order === 'wait' ? `+${cfg.skew} ms` : null });
-      st.text(COL[e.i], 282, `t = ${e.t} ms`, { size: 14, kind: 'muted', mono: true });
+      const n = st.node({ x: COL[e.i], y: LANE[e.node], w: 104, h: 44, label: `${e.name}: x=${e.value}`, sub: e.label, kind: KIND[e.value] });
+      // real time under each column: milliseconds when writes follow at once, seconds when they are a second apart
+      st.text(COL[e.i], 282, e.t >= 1000 ? `${(e.t / 1000).toFixed(1)} s` : `${e.t} ms`, { size: 14, kind: 'muted', mono: true });
       chips[e.i] = n;
       return n;
     }
@@ -270,14 +277,15 @@
       });
     }
     function logSort(e) {
-      if (e.lost) log.add('Bob’s reply has an older timestamp than the write it answers, so the store drops it', 'bad');
+      if (e.lost) log.add('Bob’s reply is older than what it answers, so the store drops it', 'bad');
       if (e.broken) log.add('Carol wrote last in real time, but her write sorts before an earlier one', 'warn');
       if (!e.lost && !e.broken) log.add('Every write sorts in the order it happened', 'good');
       log.add(`The store keeps the highest timestamp: x = ${e.final}`, e.final === 3 ? 'good' : 'warn');
     }
     // Carol wrote last, so x = 3 should win; a dropped reply can hide behind that, so it gets its own line
     function showVerdict(e) {
-      verdict.set(e.final === 3 ? 'x = 3 wins ✓' : `x = ${e.final} wins, not 3`, e.final === 3 ? 'good' : 'warn');
+      if (e.final !== 3) verdict.set(`x = ${e.final} wins, not 3`, 'warn');
+      else verdict.set(e.lost ? 'x = 3 wins' : 'x = 3 wins ✓', e.lost ? 'text2' : 'good');
       verdict2.set(e.lost ? 'Bob’s reply dropped' : '', 'bad');
     }
 
@@ -291,7 +299,7 @@
         trace.forEach((e) => {
           if (e.type === 'write') { writeChip(e, cfg); logWrite(e, cfg); }
           if (e.type === 'sort') {
-            slots(e, trace).forEach((s) => st.node({ x: 478, y: s.y, w: 104, h: 42, label: `x=${s.w.value}`, sub: s.w.label, kind: s.kind }));
+            slots(e, trace).forEach((s) => st.node({ x: SORTED, y: s.y, w: 104, h: 42, label: `x=${s.w.value}`, sub: s.w.label, kind: s.kind }));
             logSort(e);
             showVerdict(e);
           }
@@ -306,7 +314,7 @@
           const n = writeChip(e, cfg);
           n.flash();
           logWrite(e, cfg);
-          if (cfg.order === 'wait') log.add(`Node ${e.node} holds the write ${cfg.skew} ms before confirming it`, 'warn');
+          if (cfg.order === 'wait' && cfg.skew) log.add(`Node ${e.node} holds the write ${cfg.skew} ms before confirming it`, 'warn');
           await v.sleep(api.pace(700));
         } else if (e.type === 'read') {
           await st.send(chips[0], { x: COL[1], y: LANE.B }, { label: 'x=1', kind: 'data', dur: api.pace(700), curve: 20 });
@@ -314,8 +322,8 @@
         } else if (e.type === 'sort') {
           const ss = slots(e, trace);
           for (const s of ss) {
-            await st.send(chips[s.w.i], { x: 478, y: s.y }, { label: `x=${s.w.value}`, kind: KIND[s.w.value], dur: api.pace(600) });
-            st.node({ x: 478, y: s.y, w: 104, h: 42, label: `x=${s.w.value}`, sub: s.w.label, kind: s.kind });
+            await st.send(chips[s.w.i], { x: SORTED, y: s.y }, { label: `x=${s.w.value}`, kind: KIND[s.w.value], dur: api.pace(600) });
+            st.node({ x: SORTED, y: s.y, w: 104, h: 42, label: `x=${s.w.value}`, sub: s.w.label, kind: s.kind });
           }
           logSort(e);
           showVerdict(e);

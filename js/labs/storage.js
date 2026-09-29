@@ -40,20 +40,19 @@
     let wal = 0;
     let version = 0;
     let lost = 0;
-    let since = 0;           // writes since the last flush
-    const latest = new Map(); // key → newest version acknowledged
+    let since = 0;           // acknowledged writes buffered in the memtable since the last flush
     // an entry on disk is stale when a newer segment holds a newer version of its key
     const staleIn = () => {
       const seen = new Set();
       return segs.map((s) => { let st = 0; s.keys.forEach((v, k) => { if (seen.has(k)) st++; }); s.keys.forEach((v, k) => seen.add(k)); return st; });
     };
-    const snap = () => { const st = staleIn(); return { mem: mem.size, segs: segs.map((s, k) => ({ n: s.keys.size, stale: st[k] })), wal }; };
+    // the memtable fills by writes (an overwrite still takes a slot's worth of buffer), so the slots show `since`
+    const snap = () => { const st = staleIn(); return { mem: since, segs: segs.map((s, k) => ({ n: s.keys.size, stale: st[k] })), wal, units }; };
     ops.writes.forEach((key, i) => {
       const was = units;
       version++;
       if (cfg.wal === 'on') { wal++; units++; }
       mem.set(key, version);
-      latest.set(key, version);
       since++;
       const ev = { type: 'write', i, key, did: 'mem' };
       if (since >= MEM) {
@@ -76,9 +75,9 @@
       ev.cost = units - was;
       trace.push(ev);
       if (i === crashAt) {
-        // a crash wipes memory: without a log, the memtable's acknowledged writes are gone
-        lost = cfg.wal === 'on' ? 0 : mem.size;
-        trace.push({ type: 'crash', i, lost, corrupt: 0, replayed: cfg.wal === 'on' ? mem.size : 0 });
+        // a crash wipes memory: without a log, the writes buffered in the memtable are gone
+        lost = cfg.wal === 'on' ? 0 : since;
+        trace.push({ type: 'crash', i, lost, corrupt: 0, replayed: cfg.wal === 'on' ? since : 0 });
         if (cfg.wal !== 'on') { mem = new Map(); since = 0; }
       }
     });
@@ -108,7 +107,8 @@
     let units = 0;
     let wal = 0;
     let corrupt = 0;
-    const snap = () => ({ leaves: leaves.map((l) => l.length), wal });
+    const snap = () => ({ leaves: leaves.map((l) => l.length), wal, units });
+    let tornKey = null; // the first key of a half-written page, to find it again after later splits
     ops.writes.forEach((key, i) => {
       const was = units;
       if (cfg.wal === 'on') { wal++; units++; }
@@ -133,7 +133,9 @@
         // a crash during a split leaves the root pointing at a half-written page, unless the log can redo it
         const torn = ev.did === 'split' && cfg.wal !== 'on' ? 1 : 0;
         corrupt = torn;
-        trace.push({ type: 'crash', i, lost: 0, corrupt: torn, during: ev.did, page: p });
+        // the new right-hand page is the one the crash left half-written
+        if (torn) tornKey = leaves[p + 1][0];
+        trace.push({ type: 'crash', i, lost: 0, corrupt: torn, during: ev.did, page: torn ? p + 1 : p });
       }
     });
     let total = 0;
@@ -142,7 +144,8 @@
       total += 2; // the root page, then one leaf page
       trace.push({ type: 'read', j, key, page: p, found: leaves[p].includes(key), cost: 2 });
     });
-    return { trace, units, lost: 0, corrupt, worst: 2, avg: total / READS, stalePct: 0 };
+    const tornAt = tornKey == null ? null : leaves.findIndex((l) => l.includes(tornKey));
+    return { trace, units, lost: 0, corrupt, worst: 2, avg: total / READS, stalePct: 0, tornAt };
   }
 
   function run(cfg, seed) {
@@ -151,7 +154,7 @@
     const crashAt = cfg.crash === 'midway' ? rng.int(20, 59) : -1;
     const r = (cfg.engine === 'lsm' ? lsm : btree)(cfg, rng, ops, crashAt);
     const amp = Math.round((r.units / WRITES) * 10) / 10;
-    r.trace.push({ type: 'done', amp, avg: Math.round(r.avg * 10) / 10, worst: r.worst, stale: r.stalePct });
+    r.trace.push({ type: 'done', amp, units: r.units, avg: Math.round(r.avg * 10) / 10, worst: r.worst, stale: r.stalePct, tornAt: r.tornAt });
     return {
       trace: r.trace,
       stats: {
@@ -214,8 +217,8 @@
       if (!LOAD_LABEL[c.load]) c.load = 'inserts';
       ['compact', 'bloom', 'wal'].forEach((k) => { if (!['off', 'on'].includes(c[k])) c[k] = 'off'; });
       if (!['none', 'midway'].includes(c.crash)) c.crash = 'none';
-      // compaction and Bloom filters are LSM-tree parts; a B-tree has neither
-      if (c.engine === 'btree') LSM_ONLY.forEach((k) => { c[k] = 'off'; });
+      // compaction and Bloom filters are LSM-tree parts: a B-tree ignores them, but they keep their values
+      // so that switching back to the LSM-tree restores the setup the learner had
       return c;
     },
     disabled: (cfg, knob, value) => cfg.engine === 'btree' && LSM_ONLY.includes(knob) && value === 'on',
@@ -254,7 +257,7 @@
         blurb: 'Small writes into fixed pages. What does the disk pay?',
         config: { engine: 'btree', load: 'inserts' }, knobs: ['engine', 'load'],
         nudge: 'Switch to the LSM-tree and compare the disk writes.',
-        predict: { q: 'Each new key rewrites its whole 8-key page. Will a write cost more than 4× its size on disk?', metric: 'heavy' },
+        predict: { q: 'New keys go into a B-tree. Will each write cost the disk more than 4× its own size?', metric: 'heavy' },
       },
       {
         id: 'lsm-writes', title: 'LSM-tree writes',
@@ -287,7 +290,7 @@
       {
         id: 'crash-btree', title: 'Crash during a split',
         blurb: 'A split rewrites three pages. What if it stops halfway?',
-        config: { engine: 'btree', load: 'inserts', crash: 'midway', wal: 'off' }, knobs: ['wal', 'load'],
+        config: { engine: 'btree', load: 'inserts', crash: 'midway', wal: 'off' }, knobs: ['wal', 'load'], input: 6, // a run where the crash tears a split
         nudge: 'Turn the write-ahead log on: it can redo the split.',
         predict: { q: 'The B-tree crashes midway, with no log. Will the tree end up corrupted?', metric: 'corrupt' },
       },
@@ -303,7 +306,7 @@
       {
         id: 'cheap-and-quick', title: 'Cheap writes, quick reads',
         blurb: 'Readers ask for missing keys. Keep writes and reads cheap.',
-        goal: 'Readers keep asking for keys that don’t exist. Keep writes under 4× on disk, and never check more than 3 places per read.',
+        goal: 'Readers keep asking for keys that don’t exist. Keep writes at most 4× on disk, and never check more than 3 places per read.',
         config: { engine: 'btree', load: 'misses', compact: 'off', bloom: 'off' }, knobs: ['engine', 'bloom', 'compact'],
         criteria: [
           { label: `Writes cost at most ${HEAVY}× on disk`, metric: 'heavy', max: 0 },
@@ -327,10 +330,10 @@
       {
         id: 'lean', title: 'Lean disk, cheap writes',
         blurb: 'Overwrite the same keys without filling the disk.',
-        goal: 'Eight keys are overwritten again and again. Keep old versions under half the disk, and writes under 4× their size.',
+        goal: 'Eight keys are overwritten again and again. Keep old versions to at most half the disk, and writes at most 4× their size.',
         config: { engine: 'lsm', load: 'updates', compact: 'off' }, knobs: ['compact', 'engine'],
         criteria: [
-          { label: 'Old versions stay under half the disk', metric: 'bloat', max: 0 },
+          { label: 'Old versions take at most half the disk', metric: 'bloat', max: 0 },
           { label: `Writes cost at most ${HEAVY}× on disk`, metric: 'heavy', max: 0 },
         ],
         hint: 'A B-tree has no old versions, but what does each small write cost it?',
@@ -363,7 +366,8 @@
       disk = st.text(10, 214, 'disk writes 0', { size: 14, anchor: 'start', mono: true, kind: 'muted' });
       walText = cfg.wal === 'on' ? st.text(10, 238, 'log 0', { size: 14, anchor: 'start', mono: true, kind: 'good' }) : null;
       if (cfg.engine === 'lsm') {
-        st.box(128, 36, 168, 70, { kind: 'primary', label: 'Memtable, in memory' });
+        st.box(128, 36, 168, 70, { kind: 'primary' });
+        st.text(140, 58, 'Memtable, in memory', { size: 14, anchor: 'start', weight: 600, kind: 'text2' });
         st.text(330, 50, 'Segments on disk, newest first', { size: 14, anchor: 'start', weight: 600, kind: 'text2' });
       } else st.text(330, 50, 'Pages on disk', { size: 14, anchor: 'start', weight: 600, kind: 'text2' });
       dyn = [];
@@ -379,9 +383,11 @@
       anchors.mem = { x: 212, y: 80 };
       anchors.segs = s.segs.map((seg, k) => {
         const y = 64 + k * 26;
-        const w = Math.min(214, 64 + seg.n * 2.3); // wide enough for its label, longer as segments grow
-        keep(st.rect(330, y, w, 20, { kind: o && o.read && o.read.has(k) ? 'warn' : 'data', rx: 5, label: `${seg.n} keys`, size: 14 }));
+        const w = Math.min(160, 64 + seg.n * 1.5); // wide enough for its label; capped so "filtered" still fits beside it
+        keep(st.rect(330, y, w, 20, { kind: o && o.read && o.read.has(k) ? 'warn' : 'data', rx: 5 }));
+        // the old versions' share, shaded red, then the label on top of both
         if (seg.stale) keep(st.rect(330 + w - Math.max(4, (w * seg.stale) / seg.n), y, Math.max(4, (w * seg.stale) / seg.n), 20, { kind: 'bad', rx: 5 }));
+        keep(st.text(330 + w / 2, y + 15, `${seg.n} keys`, { size: 14, weight: 600, kind: 'text', layer: 'top' }));
         if (o && o.skipped && o.skipped.has(k)) keep(st.text(330 + w + 6, y + 15, 'filtered', { size: 14, anchor: 'start', kind: 'good' }));
         return { x: 330 + w / 2, y: y + 10 };
       });
@@ -390,7 +396,7 @@
     function paintBTree(s, o) {
       clear();
       const n = s.leaves.length;
-      keep(st.rect(370, 60, 120, 26, { kind: 'neutral', rx: 5, label: `root: ${n} pages`, size: 14 }));
+      keep(st.rect(370, 60, 120, 26, { kind: 'neutral', rx: 5, label: 'root page', size: 14 }));
       anchors.root = { x: 430, y: 73 };
       const w = Math.min(34, (410 - (n - 1) * 4) / n);
       const x0 = 330 + (220 - (n * w + (n - 1) * 4)) / 2 - 90;
@@ -410,7 +416,7 @@
     }
 
     function logWrite(e, cfg) {
-      if (e.did === 'flush') log.add(`Memtable full: flushed as a new sorted segment`, 'info');
+      if (e.did === 'flush') log.add(`${MEM} writes buffered: the memtable is flushed as a sorted segment`, 'info');
       else if (e.did === 'compact') log.add('Four segments: compaction merges them, keeping the newest versions', 'good');
       else if (e.did === 'split') log.add(`Page ${e.page + 1} is full: split in two, 3 pages rewritten`, 'warn');
     }
@@ -430,12 +436,8 @@
         log.add(`read k=${e.key}: ${e.cost} segment${e.cost === 1 ? '' : 's'} read${skipped ? `, ${skipped} skipped by Bloom filters` : ''}${e.found ? '' : ', not found'}`, e.cost > SLOW ? 'warn' : 'info');
       }
     }
-    // disk units so far, recomputed from the write events for the counter
-    function unitsAt(trace, i, cfg) {
-      return trace.filter((x) => x.type === 'write' && x.i <= i).reduce((sum, x) => sum + x.cost, 0);
-    }
     function finish(done, cfg) {
-      disk.set(`disk writes ${Math.round(done.amp * WRITES)}`);
+      disk.set(`disk writes ${done.units}`);
       log.add(`${done.amp}× disk writes per write; reads check ${done.avg} places on average`, done.amp > HEAVY ? 'warn' : 'good');
     }
 
@@ -450,7 +452,8 @@
       if (!o.animate) {
         const last = writes[writes.length - 1];
         const crash = trace.find((e) => e.type === 'crash');
-        paint(cfg, last.state, crash && crash.corrupt ? { torn: crash.page } : null);
+        const done = trace[trace.length - 1];
+        paint(cfg, last.state, crash && crash.corrupt ? { torn: done.tornAt } : null);
         if (crash) logCrash(crash, cfg);
         const reads = trace.filter((e) => e.type === 'read');
         reads.slice(-3).forEach((e) => logRead(e, cfg));
@@ -478,7 +481,7 @@
             await v.sleep(api.pace(e.did === 'mem' || e.did === 'page' ? 90 : 260));
           }
           logWrite(e, cfg);
-          setDisk(unitsAt(trace, e.i, cfg), e.state.wal);
+          setDisk(e.state.units, e.state.wal);
         } else if (e.type === 'crash') {
           const w = trace.find((x) => x.type === 'write' && x.i === e.i);
           paint(cfg, cfg.engine === 'lsm' && e.lost ? Object.assign({}, w.state, { mem: 0 }) : w.state, e.corrupt ? { torn: e.page } : null);

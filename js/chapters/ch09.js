@@ -778,7 +778,6 @@
       /* 9 ─────────────────────────────────────────────── */
       {
         title: 'Timestamps can’t decide right now',
-        lab: { id: 'clocks', preset: 'lamport' },
         caption: 'A Lamport order is final only after hearing from every node. A shared, totally ordered log fixes the order on delivery, so the first claim wins.',
         problem: 'Order known too late',
         fix: 'Total order broadcast',

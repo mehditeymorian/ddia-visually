@@ -473,6 +473,31 @@ test('clocks: Lamport clocks keep causes first but not real-time order', () => {
   });
 });
 
+test('clocks: lost and order agree with the sorted list', () => {
+  [0, 5, 50, 200].forEach((skew) => ['fast', 'slow'].forEach((gap) => ['wall', 'lamport', 'wait'].forEach((order) => {
+    const cfg = DDIA.lab.configFor(CK(), { skew, gap, order });
+    CK().samples(cfg).forEach((seed) => {
+      const { trace, stats } = CK().run(cfg, seed);
+      const pos = (v) => trace.find((e) => e.type === 'sort').order.indexOf(v);
+      const where = `${skew} ms, ${gap}, ${order}, seed ${seed}`;
+      assert.equal(stats.lost, pos(2) < pos(1) ? 1 : 0, `${where}: lost`);
+      assert.equal(stats.order, pos(2) < pos(1) || pos(3) < pos(2) || pos(3) < pos(1) ? 1 : 0, `${where}: order`); // values 1, 2, 3 were written in that order
+    });
+  })));
+});
+
+test('clocks: Lamport results ignore skew and gaps, and Carol never sorts before Alice', () => {
+  const base = ckRuns({ skew: 0, gap: 'fast', order: 'lamport' }).map((r) => r.stats);
+  [5, 50, 200].forEach((skew) => ['fast', 'slow'].forEach((gap) => {
+    assert.deepEqual(ckRuns({ skew, gap, order: 'lamport' }).map((r) => [r.stats.lost, r.stats.order, r.stats.final]), base.map((x) => [x.lost, x.order, x.final]), `${skew} ms, ${gap}`);
+  }));
+  const cfg = DDIA.lab.configFor(CK(), { skew: 200, gap: 'fast', order: 'lamport' });
+  CK().samples(cfg).forEach((seed) => {
+    const order = CK().run(cfg, seed).trace.find((e) => e.type === 'sort').order;
+    assert.ok(order.indexOf(3) > order.indexOf(1), `seed ${seed}: Carol's counter ties or beats Alice's, and node C sorts after A`);
+  });
+});
+
 test('clocks: commit wait keeps every order and waits exactly the skew', () => {
   [0, 5, 50, 200].forEach((skew) => ['fast', 'slow'].forEach((gap) => ckRuns({ skew, gap, order: 'wait' }).forEach((r) => {
     assert.equal(r.stats.lost + r.stats.order, 0, `${skew} ms, ${gap}`);
@@ -517,10 +542,51 @@ test('storage: a write-ahead log makes both engines crash-safe', () => {
   ['lsm', 'btree'].forEach((engine) => sgRuns({ engine, crash: 'midway', wal: 'on' }).forEach((r) => assert.equal(r.stats.lost + r.stats.corrupt, 0, engine)));
 });
 
-test('storage: compaction and Bloom filters are LSM-tree parts only', () => {
-  const cfg = DDIA.lab.configFor(SG(), { engine: 'btree', compact: 'on', bloom: 'on' });
-  assert.equal(cfg.compact, 'off');
-  assert.equal(cfg.bloom, 'off');
+test('storage: a B-tree ignores the LSM-tree knobs, and switching back keeps them', () => {
+  const plain = sgRuns({ engine: 'btree', load: 'inserts', crash: 'midway' }).map((r) => r.stats);
+  assert.deepEqual(sgRuns({ engine: 'btree', load: 'inserts', crash: 'midway', compact: 'on', bloom: 'on' }).map((r) => r.stats), plain);
+  const there = DDIA.lab.configFor(SG(), { engine: 'btree', compact: 'on', bloom: 'on' });
+  const back = DDIA.lab.configFor(SG(), there, { engine: 'lsm' });
+  assert.equal(back.compact, 'on');
+  assert.equal(back.bloom, 'on');
+});
+
+test('storage: an LSM crash loses exactly the writes buffered since the last flush', () => {
+  const cfg = DDIA.lab.configFor(SG(), { engine: 'lsm', load: 'updates', crash: 'midway', wal: 'off' });
+  SG().samples(cfg).forEach((seed) => {
+    const { trace, stats } = SG().run(cfg, seed);
+    const crash = trace.find((e) => e.type === 'crash');
+    const buffered = trace.find((e) => e.type === 'write' && e.i === crash.i).state.mem;
+    assert.equal(stats.lost, buffered, `seed ${seed}`);
+  });
+});
+
+test('storage: a B-tree crash tears the tree only when it lands on a split', () => {
+  ['inserts', 'updates', 'misses'].forEach((load) => {
+    const cfg = DDIA.lab.configFor(SG(), { engine: 'btree', load, crash: 'midway', wal: 'off' });
+    SG().samples(cfg).forEach((seed) => {
+      const { trace, stats } = SG().run(cfg, seed);
+      const crash = trace.find((e) => e.type === 'crash');
+      const split = trace.find((e) => e.type === 'write' && e.i === crash.i).did === 'split';
+      assert.equal(stats.corrupt, split ? 1 : 0, `${load}, seed ${seed}`);
+    });
+  });
+  assert.equal(sgCount({ engine: 'btree', load: 'updates', crash: 'midway' }, 'corrupt'), 0, 'overwrites never split');
+});
+
+test('storage: the disk counter is the sum of every write’s cost', () => {
+  [{ engine: 'lsm', compact: 'on', wal: 'on' }, { engine: 'lsm', load: 'updates' }, { engine: 'btree', wal: 'on' }].forEach((c) => {
+    const cfg = DDIA.lab.configFor(SG(), c);
+    SG().samples(cfg).slice(0, 20).forEach((seed) => {
+      const { trace } = SG().run(cfg, seed);
+      const done = trace[trace.length - 1];
+      const sum = trace.filter((e) => e.type === 'write').reduce((a, e) => a + e.cost, 0);
+      assert.equal(done.units, sum);
+      assert.equal(done.amp, Math.round((sum / DDIA.labs.storageModel.WRITES) * 10) / 10);
+    });
+  });
+  assert.ok(sgRuns({ engine: 'btree', load: 'updates' }).every((r) => r.stats.amp === 8), 'an overwrite rewrites one 8-key page');
+  assert.ok(sgRuns({ engine: 'lsm', load: 'inserts', compact: 'off' }).every((r) => r.stats.amp === 1), 'each key is written once, when flushed');
 });
 
 /* ---------- streams lab ---------- */
@@ -632,7 +698,7 @@ test('every card lab link points at a real lab and preset', () => {
   DDIA.chapter = (def) => def.cards.forEach((c, i) => { if (c.lab) links.push({ where: `ch${def.id}/${i + 1}`, lab: c.lab }); });
   for (const n of ['03', '05', '06', '07', '08', '09', '11']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
   DDIA.chapter = saved;
-  assert.ok(links.length >= 36, `expected at least 36 card links, found ${links.length}`);
+  assert.ok(links.length >= 35, `expected at least 35 card links, found ${links.length}`);
   links.forEach(({ where, lab }) => {
     const l = DDIA.lab.get(lab.id);
     assert.ok(l, `${where}: no lab ${lab.id}`);
@@ -703,6 +769,17 @@ test('predictions ask about the setup on screen', () => {
   assert.deepEqual(ask('leases', 'zombie'), [1, 40, 100]);
   assert.deepEqual(ask('leases', 'fencing'), [0, 0, 100]);
   assert.deepEqual(ask('leases', 'crash'), [2, 100, 100]);
+  assert.deepEqual(ask('clocks', 'no-skew'), [0, 0, 100]);
+  assert.deepEqual(ask('clocks', 'skewed'), [1, 33, 100]);
+  assert.deepEqual(ask('clocks', 'slow-reply'), [0, 0, 100]);
+  assert.deepEqual(ask('clocks', 'lamport'), [1, 21, 100]);
+  assert.deepEqual(ask('clocks', 'commit-wait'), [0, 0, 100]);
+  assert.deepEqual(ask('storage', 'btree-writes'), [2, 100, 100]);
+  assert.deepEqual(ask('storage', 'lsm-writes'), [0, 0, 100]);
+  assert.deepEqual(ask('storage', 'no-compaction'), [2, 100, 100]);
+  assert.deepEqual(ask('storage', 'overwrites'), [2, 100, 100]);
+  assert.deepEqual(ask('storage', 'crash-lsm'), [1, 86, 100]);
+  assert.deepEqual(ask('storage', 'crash-btree'), [1, 16, 100]);
 });
 
 test('validation asks for sketches, blurbs and solution reasons, and rejects predict.config', () => {
