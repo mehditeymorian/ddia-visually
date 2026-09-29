@@ -126,13 +126,16 @@
     // one range read: which nodes might hold the range?
     let nodes;
     let label;
+    let short;
     const all = Array.from({ length: n }, (_, k) => k);
     if (cfg.load === 'sensors') {
       label = 'sensor 3, the whole minute';
+      short = 'read sensor 3';
       const local = cfg.place === 'range' || cfg.place === 'compound';
       nodes = local ? [...new Set([...stored.values()].filter((w) => w.sensor === 3).map(nodeOf))] : all;
     } else {
       label = 'users 2000–2399';
+      short = 'read 2000–2399';
       if (cfg.place === 'range') {
         const set = new Set();
         for (let p = Math.floor(0.2 * P); p <= Math.floor(0.2399 * P); p++) set.add(owner[p]);
@@ -140,7 +143,7 @@
       } else nodes = all;
     }
     nodes.sort((a, b) => a - b);
-    trace.push({ type: 'read', label, nodes, of: n });
+    trace.push({ type: 'read', label, short, nodes, of: n });
 
     let hot = 0;
     phases.forEach((ph) => { if (Math.max(...ph.load) / ph.total > HOT / ph.n) hot = 1; });
@@ -340,8 +343,9 @@
       layout = Array.from({ length: most }, (_, k) => y0 + k * gapY);
       st.text(280, 18, PLACE_RULE[cfg.place], { size: 14.5, weight: 700, kind: 'text' });
       app = st.node({ x: 62, y: 150, w: 56, h: 56, shape: 'person', label: 'App', kind: 'data' });
-      ticker = st.text(62, 222, ' ', { size: 14, mono: true, kind: 'text2' });
-      counter = st.text(62, 250, '', { size: 13, kind: 'muted', mono: true });
+      // left-aligned under the app so long sensor keys stay inside the stage and clear of the rows
+      ticker = st.text(10, 222, ' ', { size: 14, mono: true, kind: 'text2', anchor: 'start' });
+      counter = st.text(10, 250, '', { size: 13, kind: 'muted', mono: true, anchor: 'start' });
       rows = [];
       bars = [];
       pcts = [];
@@ -475,7 +479,7 @@
         } else if (e.type === 'read') {
           paintLoad(load, total, n);
           logQuiet();
-          ticker.set(e.label);
+          ticker.set(e.short);
           const every = e.nodes.length === e.of;
           await Promise.all(e.nodes.map((k) => st.send(app, rows[k], { label: 'read', kind: every ? 'warn' : 'info', dur: api.pace(700) })));
           logRead(e);
