@@ -115,10 +115,19 @@
     const el = h('div', { class: 'lab-nav', onkeydown: (e) => { if (e.key === 'Escape' && !more.hidden) { setOpen(false); toggle.focus(); } } },
       h('div', { class: 'lab-strip-row' }, row, toggle), more);
     paint();
-    // on narrow screens the row scrolls sideways: bring the current card into view
+    // when the row is wider than the page it scrolls sideways; faded edges show there is more
+    const edges = () => {
+      const max = row.scrollWidth - row.clientWidth;
+      row.classList.toggle('fade-l', row.scrollLeft > 2);
+      row.classList.toggle('fade-r', row.scrollLeft < max - 2);
+    };
+    row.addEventListener('scroll', edges, { passive: true });
+    if (window.ResizeObserver) new ResizeObserver(edges).observe(row);
+    // bring the current card into view
     requestAnimationFrame(() => {
       const c = row.querySelector('.current');
       if (c && row.scrollWidth > row.clientWidth) row.scrollLeft = Math.max(0, c.offsetLeft - (row.clientWidth - c.offsetWidth) / 2);
+      edges();
     });
     return { el, paint };
   }
