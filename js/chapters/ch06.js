@@ -133,6 +133,7 @@
       /* 2 ─────────────────────────────────────────────── */
       {
         title: 'Key ranges, like encyclopedia volumes',
+        lab: { id: 'partition', preset: 'time-hotspot' },
         caption: 'Each partition owns a sorted range of keys, so range scans touch few partitions. But timestamp keys send every write to the newest range.',
         problem: 'Hot spot on today\'s partition',
         fix: 'Prefix keys with a sensor name',
@@ -217,6 +218,7 @@
       /* 3 ─────────────────────────────────────────────── */
       {
         title: 'Hash the key: even spread, lost order',
+        lab: { id: 'partition', preset: 'hash-scatter' },
         caption: 'A hash scatters similar keys evenly, curing hot spots. But neighbors in key order land far apart, so range scans must ask every partition.',
         problem: 'Range scans hit all partitions',
         fix: 'Compound key: hash one part, sort the rest',
@@ -319,6 +321,7 @@
       /* 4 ─────────────────────────────────────────────── */
       {
         title: 'One celebrity key melts one partition',
+        lab: { id: 'partition', preset: 'celebrity' },
         caption: 'Hashing can\'t split one key, so all its writes hit one partition. A random suffix spreads them; reads then merge every part.',
         problem: 'Hot key',
         fix: 'Key + random suffix',
@@ -521,6 +524,7 @@
       /* 6 ─────────────────────────────────────────────── */
       {
         title: 'hash mod N: add a node, move everything',
+        lab: { id: 'partition', preset: 'mod-n' },
         caption: 'With hash mod N, changing N reassigns most keys, so rebalancing ships nearly all data. Mapping keys to many fixed partitions avoids that.',
         problem: 'Most keys move',
         fix: 'hash → fixed partition → node',
@@ -632,6 +636,7 @@
       /* 7 ─────────────────────────────────────────────── */
       {
         title: 'Many partitions, move whole ones',
+        lab: { id: 'partition', preset: 'mod-n', set: { place: 'hash' } },
         caption: 'Create far more partitions than nodes. A new node steals a few whole partitions from the others; no key ever changes partition.',
         tags: ['Riak', 'Elasticsearch', 'Couchbase', 'Voldemort'],
         demo(el, v) {
