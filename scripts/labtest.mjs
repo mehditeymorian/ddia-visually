@@ -183,6 +183,138 @@ test('quorum: normalize clamps w and r to n and sizes slots', () => {
   assert.equal(qcfg({ n: 5, slots: ['down', 'bogus'] }).slots.join(), 'down,up,up,up,up');
 });
 
+/* ---------- isolation lab ---------- */
+const I = () => DDIA.lab.get('isolation');
+const ipreset = (id) => I().presets.find((x) => x.id === id);
+const icfg = (id, o) => DDIA.lab.configFor(I(), ipreset(id).config, o);
+const ibad = (id, o) => DDIA.lab.runAll(I(), icfg(id, o)).filter((x) => x.stats.anomaly).length;
+
+test('isolation: each scenario breaks at its weak level and is fixed at its fix level', () => {
+  const table = [
+    ['dirty-read', { iso: 'none', t1end: 'abort' }, { iso: 'rc', t1end: 'abort' }],
+    ['dirty-write', { iso: 'none' }, { iso: 'rc' }],
+    ['read-skew', { iso: 'rc' }, { iso: 'si' }],
+    ['lost-update', { iso: 'rc' }, { iso: 'si' }],
+    ['lost-update', { iso: 'rc' }, { iso: 'ssi' }],
+    ['lost-update', { iso: 'rc' }, { iso: '2pl' }],
+    ['write-skew', { iso: 'si' }, { iso: 'ssi' }],
+    ['write-skew', { iso: 'si' }, { iso: '2pl' }],
+    ['write-skew', { iso: 'si' }, { iso: 'rc', lock: 'rows' }],
+    ['phantom', { iso: 'si' }, { iso: 'ssi' }],
+    ['phantom', { iso: 'si' }, { iso: '2pl' }],
+  ];
+  for (const [p, weak, fix] of table) {
+    assert.ok(ibad(p, weak) > 0, `${p} should break at ${JSON.stringify(weak)}`);
+    assert.equal(ibad(p, fix), 0, `${p} should be safe at ${JSON.stringify(fix)}`);
+  }
+  assert.ok(ibad('phantom', { iso: 'si', lock: 'rows' }) > 0, 'locking existing rows cannot stop a phantom');
+  assert.ok(ibad('write-skew', { iso: 'rc' }) > 0, 'read committed allows write skew');
+});
+
+test('isolation: serial orders are safe at every level', () => {
+  for (const p of I().presets) {
+    for (const level of ['none', 'rc', 'si', 'ssi', '2pl']) {
+      for (const lock of ['off', 'rows']) {
+        const c = DDIA.lab.configFor(I(), p.config, { iso: level, lock });
+        const [a, b] = I().stepCounts(c);
+        for (const order of [[...Array(a).fill(1), ...Array(b).fill(2)], [...Array(b).fill(2), ...Array(a).fill(1)]]) {
+          const r = I().run(c, order);
+          assert.equal(r.stats.anomaly, 0, `${p.id} ${level} ${lock} ${order.join('')}`);
+          assert.equal(r.stats.aborts, 0, `${p.id} ${level} ${lock} ${order.join('')} aborts`);
+        }
+      }
+    }
+  }
+});
+
+test('isolation: 2PL turns lost updates into a deadlock abort', () => {
+  const r = I().run(icfg('lost-update', { iso: '2pl' }), [1, 2, 1, 2, 1, 2]);
+  assert.equal(r.stats.anomaly, 0);
+  assert.equal(r.stats.aborts, 1);
+  assert.ok(r.trace.some((e) => /deadlock/.test(e.text || '')), 'mentions the deadlock');
+});
+
+test('isolation: snapshot isolation aborts the second writer (first updater wins)', () => {
+  const r = I().run(icfg('lost-update', { iso: 'si' }), [1, 2, 1, 1, 2, 2]);
+  assert.equal(r.stats.anomaly, 0);
+  assert.equal(r.stats.aborts, 1);
+  assert.equal(r.state.txs[2].status, 'aborted');
+  assert.equal(r.state.txs[1].status, 'committed');
+});
+
+test('isolation: read committed makes the second writer wait for the lock', () => {
+  const r = I().run(icfg('dirty-write', { iso: 'rc' }), [1, 2, 2, 2, 1, 1]);
+  assert.equal(r.stats.anomaly, 0);
+  assert.ok(r.stats.waits > 0);
+});
+
+test('isolation: preset orders show the anomaly at the preset level', () => {
+  for (const p of I().presets) {
+    const c = DDIA.lab.configFor(I(), p.config);
+    assert.equal(I().run(c, I().defaultInput(c)).stats.anomaly, 1, p.id);
+  }
+});
+
+test('isolation: parseInput accepts only valid interleavings', () => {
+  const c = icfg('lost-update');
+  assert.deepEqual(I().parseInput('121212', c), [1, 2, 1, 2, 1, 2]);
+  assert.equal(I().parseInput('111111', c), null);
+  assert.equal(I().parseInput('12x', c), null);
+});
+
+test('isolation: SSI lets a read-only transaction commit', () => {
+  const r = I().run(icfg('read-skew', { iso: 'ssi' }), [2, 1, 1, 1, 2, 2]);
+  assert.equal(r.stats.anomaly, 0);
+  assert.equal(r.stats.aborts, 0);
+});
+
+/* ---------- presets, predicts, challenges, card links ---------- */
+test('every lab passes validation', () => {
+  assert.ok(DDIA.labs.length >= 2);
+  DDIA.labs.forEach((l) => assert.deepEqual(DDIA.lab.validate(l), [], l.id));
+});
+
+test('every predict is computable and every preset input is valid', () => {
+  DDIA.labs.forEach((l) => l.presets.forEach((p) => {
+    const c = DDIA.lab.configFor(l, p.config);
+    const input = p.input != null ? p.input : l.defaultInput(c);
+    assert.ok(l.parseInput(l.inputKey(input), c) != null, `${l.id}/${p.id} input round-trips`);
+    if (!p.predict) return;
+    const r = DDIA.lab.predict(l, DDIA.lab.configFor(l, p.config, p.predict.config), p.predict.metric);
+    assert.ok([0, 1, 2].includes(r.answer), `${l.id}/${p.id}`);
+  }));
+});
+
+test('every challenge fails at the start and passes with its solution', () => {
+  DDIA.labs.forEach((l) => l.challenges.forEach((ch) => {
+    const start = DDIA.lab.configFor(l, ch.config);
+    const startInput = ch.input != null ? ch.input : l.defaultInput(start);
+    assert.equal(DDIA.lab.checkChallenge(l, ch, start, startInput).ok, false, `${l.id}/${ch.id} start should fail`);
+    const sol = DDIA.lab.configFor(l, ch.config, ch.solution.config);
+    const solInput = ch.solution.input != null ? ch.solution.input : startInput;
+    const res = DDIA.lab.checkChallenge(l, ch, sol, solInput);
+    assert.equal(res.ok, true, `${l.id}/${ch.id} solution: ${JSON.stringify(res.results)}`);
+  }));
+});
+
+test('every card lab link points at a real lab and preset', () => {
+  const links = [];
+  const saved = DDIA.chapter;
+  DDIA.chapter = (def) => def.cards.forEach((c, i) => { if (c.lab) links.push({ where: `ch${def.id}/${i + 1}`, lab: c.lab }); });
+  for (const n of ['05', '07', '09']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
+  DDIA.chapter = saved;
+  assert.ok(links.length >= 13, `expected at least 13 card links, found ${links.length}`);
+  links.forEach(({ where, lab }) => {
+    const l = DDIA.lab.get(lab.id);
+    assert.ok(l, `${where}: no lab ${lab.id}`);
+    assert.ok(l.presets.some((p) => p.id === lab.preset), `${where}: no preset ${lab.preset}`);
+    Object.entries(lab.set || {}).forEach(([k, val]) => {
+      const knob = l.knobs.find((x) => x.id === k);
+      assert.ok(knob && knob.options.some((o) => String(o.value) === String(val)), `${where}: bad override ${k}=${val}`);
+    });
+  });
+});
+
 /* ---------- report ---------- */
 const failed = results.filter((r) => !r.ok);
 for (const r of results) {
