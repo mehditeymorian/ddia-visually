@@ -210,7 +210,9 @@
     const shownIds = (tab.knobs || []).filter((id) => id !== 'slots');
     const unlocked = new Set(l.knobs.filter((k) => !shownIds.includes(k.id) && q[k.id] != null && editable(k.id)).map((k) => k.id));
     const predict = !isCh && tab.predict ? tab.predict : null;
-    let asking = !!predict && prog.p[tab.id] == null && !Object.keys(q).length;
+    // a saved answer counts only if it answered this exact question (see DDIA.labnav.saved)
+    const savedAnswer = () => DDIA.labnav.saved(tab, prog);
+    let asking = !!predict && savedAnswer() == null && !Object.keys(q).length;
 
     const btn = (icon, label, kind, onclick, attrs) => h('button', Object.assign({ type: 'button', class: 'vz-btn' + (kind ? ' ' + kind : ''), onclick }, attrs || {}),
       icon ? h('span', { class: 'ic', 'aria-hidden': 'true' }, DDIA.viz.icon(icon)) : null, label);
@@ -226,6 +228,7 @@
     const page = h('div', { class: 'lab' });
     page.appendChild(DDIA.labnav.header(l, env, false));
     const nav = DDIA.labnav.strip(l, env, tab.id);
+    v.onDispose(nav.dispose);
     page.appendChild(nav.el);
 
     // the live model on the left, one panel on the right: predict, setup, run, result, all runs
@@ -292,7 +295,7 @@
           h('button', { type: 'button', class: 'lab-textbtn', onclick: skipPredict }, 'Skip, just run it'));
         return;
       }
-      const saved = prog.p[tab.id];
+      const saved = savedAnswer();
       introSec._t.firstChild.textContent = reveal || (saved && saved.a >= 0) ? 'Your prediction' : 'Predict first';
       predictEl.className = 'lab-predict';
       if (reveal) {
@@ -319,17 +322,15 @@
     } }, label || 'Ask again');
     function answer(i) {
       const r = predictRes();
-      prog.p[tab.id] = { a: i, ok: i === r.answer };
-      env.save();
+      prog.p[tab.id] = { a: i, ok: i === r.answer, q: predict.q };
       asking = false;
-      nav.paint();
-      if (env.onProgress) env.onProgress();
+      progressChanged();
       paintPredict({ a: i });
       paintKnobs();
       changed();
     }
     function skipPredict() {
-      if (prog.p[tab.id] == null) { prog.p[tab.id] = { a: -1 }; env.save(); }
+      if (savedAnswer() == null) { prog.p[tab.id] = { a: -1, q: predict.q }; progressChanged(); }
       asking = false;
       paintPredict();
       paintKnobs();
@@ -339,9 +340,15 @@
     /* ----- challenge: the pass checklist (first section) and the test controls (setup section) ----- */
     const testEl = isCh ? h('div', { class: 'lab-test' }) : null;
     // kept across repaints so an open hint stays open
-    const hintEl = isCh && tab.hint ? h('details', { class: 'lab-hint' }, h('summary', null, 'Hint'), h('p', null, tab.hint)) : null;
+    const hintEl = isCh && tab.hint ? h('details', { class: 'lab-hint' }, h('summary', { 'data-k': 'hint' }, 'Hint'), h('p', null, tab.hint)) : null;
     let solved = null; // the solution's "why", shown once the learner asks for it
-    const canShowSolution = () => !prog.c[tab.id] && (prog.f[tab.id] || 0) >= 2;
+    // offered after two failed tests, until the challenge is passed; hidden while the solution is loaded
+    const canShowSolution = () => !prog.c[tab.id] && (prog.f[tab.id] || 0) >= 2 && !solved;
+    function progressChanged() {
+      env.save();
+      nav.paint();
+      if (env.onProgress) env.onProgress();
+    }
 
     /* ----- 2 · setup: at most three knobs, the rest held (presets) or fixed (challenges) ----- */
     const setupSec = section(isCh ? 'Your setup' : 'Setup');
@@ -456,9 +463,9 @@
       const allCurrent = tab.criteria.every((c) => c.scope === 'current');
       if (checkRes && checkRes.ok) {
         const next = l.challenges[chIdx + 1];
-        listEl.appendChild(h('div', { class: 'lab-reveal k-good', role: 'status' },
+        listEl.appendChild(h('div', { class: 'lab-reveal k-good' },
           h('b', null, DDIA.viz.icon('check'), prog.c[tab.id] ? 'Passed. ' : 'Passed, with the solution shown. '),
-          h('a', { class: 'lab-next', href: next ? `#/lab/${l.id}/${next.id}` : `#/lab/${l.id}` }, next ? 'Next challenge →' : 'All scenarios')));
+          h('a', { class: 'lab-next', 'data-k': 'next', href: next ? `#/lab/${l.id}/${next.id}` : `#/lab/${l.id}` }, next ? 'Next challenge →' : 'All scenarios')));
       } else if (!checkRes && prog.c[tab.id]) {
         listEl.appendChild(h('p', { class: 'lab-passed' }, DDIA.viz.icon('check'), 'Passed before'));
       }
@@ -471,7 +478,7 @@
           r ? h('span', { class: 'sr-only' }, r.ok ? 'Passes: ' : 'Fails: ') : null,
           h('span', null, h('b', null, c.label), !allCurrent && c.scope === 'current' ? ` (on the ${one} shown)` : '',
             r && r.text ? h('span', { class: 'why' }, ' · ' + r.text) : null,
-            r && !r.ok && r.failInput != null ? h('button', { type: 'button', class: 'lab-textbtn inline', onclick: () => { input = clone(r.failInput); changed({ keepCheck: true }); } }, 'Show one') : null)));
+            r && !r.ok && r.failInput != null ? h('button', { type: 'button', class: 'lab-textbtn inline', 'data-k': 'show-' + i, onclick: () => { input = clone(r.failInput); changed({ keepCheck: true }); } }, 'Show one') : null)));
       });
       listEl.appendChild(list);
       if (solved) listEl.appendChild(h('p', { class: 'lab-solution' }, h('b', null, 'Solution loaded. '), solved));
@@ -482,15 +489,19 @@
       const showSol = canShowSolution();
       testEl.append(
         h('div', { class: 'lab-check-head' },
-          btn('✓', 'Test my design', 'primary', runCheck),
-          checkRes ? h('span', { class: 'lab-test-sum ' + (checkRes.ok ? 'k-good' : 'k-bad'), role: 'status' }, checkRes.ok ? 'All met' : `${met} of ${checkRes.results.length} met`) : null),
-        hintEl || showSol ? h('div', { class: 'lab-test-help' }, hintEl, showSol ? h('button', { type: 'button', class: 'lab-textbtn', onclick: showSolution }, 'Show a solution') : null) : null);
+          btn('✓', 'Test my design', 'primary', runCheck, { 'data-k': 'test' }),
+          checkRes ? h('span', { class: 'lab-test-sum ' + (checkRes.ok ? 'k-good' : 'k-bad') }, checkRes.ok ? 'All met' : `${met} of ${checkRes.results.length} met`) : null),
+        hintEl || showSol ? h('div', { class: 'lab-test-help' }, showSol ? h('button', { type: 'button', class: 'lab-textbtn', 'data-k': 'solution', onclick: showSolution }, 'Show a solution') : null, hintEl) : null);
     }
-    function paintChallenge() { paintChecklist(); paintTest(); }
-    function progressChanged() {
-      env.save();
-      nav.paint();
-      if (env.onProgress) env.onProgress();
+    // repainting rebuilds the buttons, so keyboard focus returns to the same control (or to Test)
+    function paintChallenge() {
+      const ae = document.activeElement;
+      const key = ae && (listEl.contains(ae) || testEl.contains(ae)) ? ae.getAttribute('data-k') : null;
+      paintChecklist();
+      paintTest();
+      if (!key) return;
+      const back = listEl.querySelector(`[data-k="${key}"]`) || testEl.querySelector(`[data-k="${key}"]`) || testEl.querySelector('[data-k="test"]');
+      if (back) back.focus({ preventScroll: true });
     }
     function runCheck() {
       checkRes = checkChallenge(l, tab, cfg, input);
@@ -499,6 +510,9 @@
       else prog.f[tab.id] = (prog.f[tab.id] || 0) + 1;
       progressChanged();
       paintChallenge();
+      // one live region for results: regions created together with their text are often not read
+      const met = checkRes.results.filter((r) => r.ok).length;
+      announce.textContent = checkRes.ok ? 'Challenge passed.' : `${met} of ${checkRes.results.length} criteria met.`;
     }
     function showSolution() {
       cfg = configFor(l, tab.config, tab.solution.config);
@@ -508,6 +522,7 @@
       progressChanged();
       paintKnobs();
       changed({ keepSolved: true });
+      announce.textContent = 'Solution loaded. ' + solved;
     }
     if (isCh) paintChallenge();
 

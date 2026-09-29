@@ -358,13 +358,14 @@
     styles: ['timeline', 'knobs', 'challenges'],
     // hub thumbnail: two transactions interleaving as time flows down
     thumb: '<svg viewBox="0 0 200 110"><path d="M16 12v86" stroke="var(--text-3)" stroke-width="1.6" stroke-linecap="round" fill="none"/><path d="M12 92l4 6 4-6" stroke="var(--text-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/><rect x="30" y="14" width="72" height="18" rx="6" fill="var(--k-primary-f)" stroke="var(--k-primary-s)" stroke-width="1.6"/><text x="66" y="26.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-primary-i)">T1 read</text><rect x="108" y="36" width="72" height="18" rx="6" fill="var(--k-data-f)" stroke="var(--k-data-s)" stroke-width="1.6"/><text x="144" y="48.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-data-i)">T2 read</text><rect x="30" y="58" width="72" height="18" rx="6" fill="var(--k-primary-f)" stroke="var(--k-primary-s)" stroke-width="1.6"/><text x="66" y="70.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-primary-i)">T1 write</text><rect x="108" y="80" width="72" height="18" rx="6" fill="var(--k-data-f)" stroke="var(--k-data-s)" stroke-width="1.6"/><text x="144" y="92.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--k-data-i)">T2 write</text><rect x="108" y="100" width="72" height="0" /></svg>',
-    // scenario card drawing: both transactions' steps in the opening order, then the level (setup only)
-    sketch(cfg) {
+    // scenario card drawing: both transactions' steps in the tab's opening order, then the level (setup only)
+    sketch(cfg, input) {
       const sc = SCENARIOS[cfg.scenario];
-      const slot = Math.min(40, 216 / sc.order.length);
-      const x0 = 120 - (slot * sc.order.length) / 2;
+      const order = Array.isArray(input) && parseInput(input.join(''), cfg) ? input : sc.order;
+      const slot = Math.min(40, 216 / order.length);
+      const x0 = 120 - (slot * order.length) / 2;
       const next = [0, 0];
-      const marks = sc.order.map((tx, k) => {
+      const marks = order.map((tx, k) => {
         const st = sc.txs[tx - 1][next[tx - 1]++];
         const kind = tx === 1 ? 'primary' : 'data';
         const cx = x0 + slot * k + slot / 2;

@@ -370,21 +370,30 @@ test('labnav.status covers every card state, old progress included', () => {
   assert.equal(st(ch, { s: { [ch.id]: true } }), 'seen');
   assert.equal(st(ch, { c: { [ch.id]: 1 }, s: { [ch.id]: true } }), 'passed', 'passed before seeing the solution');
   assert.equal(st(Object.assign({ kind: 'challenge' }, ch), undefined), 'open', 'a copied tab still counts as a challenge');
+  assert.equal(st(pre, { p: { 'stale-read': { a: 2, ok: true, q: pre.predict.q } } }), 'right', 'stamped with this question');
+  assert.equal(st(pre, { p: { 'stale-read': { a: 2, ok: true, q: 'an older question' } } }), 'new', 'an answer to a rewritten question no longer counts');
 });
 
-test('sketches draw every tab from its config alone', () => {
+test('sketches draw every tab from its opening setup alone', () => {
   DDIA.labs.forEach((l) => l.presets.concat(l.challenges).forEach((t) => {
-    const cfg = DDIA.lab.configFor(l, t.config);
-    const run = l.run;
-    l.run = () => { throw new Error('a sketch must not run the model'); };
+    const [run, simRun] = [l.run, DDIA.sim.run];
+    l.run = DDIA.sim.run = () => { throw new Error('a sketch must not run the model'); };
     try {
-      const svg = l.sketch(cfg);
+      const svg = DDIA.labnav.sketchOf(l, t);
       assert.match(svg, /^<svg[\s>]/, `${l.id}/${t.id}`);
-      assert.equal(l.sketch(DDIA.lab.configFor(l, t.config)), svg, `${l.id}/${t.id} is deterministic`);
+      assert.equal(DDIA.labnav.sketchOf(l, t), svg, `${l.id}/${t.id} is deterministic`);
       assert.ok((svg.match(/<text/g) || []).length <= 1, `${l.id}/${t.id}: at most one label`);
       (svg.match(/font-size="([\d.]+)"/g) || []).forEach((m) => assert.ok(parseFloat(m.split('"')[1]) >= 14, `${l.id}/${t.id}: ${m}`));
-    } finally { l.run = run; }
+    } finally { l.run = run; DDIA.sim.run = simRun; }
   }));
+});
+
+test('a challenge card draws its opening order, not its answer', () => {
+  const l = DDIA.lab.get('isolation');
+  const ch = l.challenges.find((c) => c.id === 'break-si');
+  const cfg = DDIA.lab.configFor(l, ch.config);
+  assert.notEqual(DDIA.labnav.sketchOf(l, ch), l.sketch(cfg, ch.solution.input));
+  assert.equal(DDIA.labnav.sketchOf(l, ch), l.sketch(cfg, ch.input));
 });
 
 test('predictions ask about the setup on screen', () => {
@@ -392,12 +401,13 @@ test('predictions ask about the setup on screen', () => {
     const l = DDIA.lab.get(lab);
     const p = l.presets.find((x) => x.id === id);
     assert.equal(p.predict.config, undefined, `${lab}/${id} still has predict.config`);
-    return DDIA.lab.predict(l, DDIA.lab.configFor(l, p.config), p.predict.metric).answer;
+    const r = DDIA.lab.predict(l, DDIA.lab.configFor(l, p.config), p.predict.metric);
+    return [r.answer, r.hits, r.total];
   };
-  assert.equal(ask('quorum', 'read-repair'), 1, 'repair after the reply still leaves some stale reads');
-  assert.equal(ask('isolation', 'dirty-read'), 1);
-  assert.equal(ask('isolation', 'lost-update'), 1);
-  assert.equal(ask('isolation', 'phantom'), 1, 'row locks cannot lock a row that does not exist');
+  assert.deepEqual(ask('quorum', 'read-repair'), [1, 24, 100], 'repair after the reply still leaves some stale reads');
+  assert.deepEqual(ask('isolation', 'dirty-read'), [1, 2, 6]);
+  assert.deepEqual(ask('isolation', 'lost-update'), [1, 18, 20]);
+  assert.deepEqual(ask('isolation', 'phantom'), [1, 12, 20], 'row locks cannot lock a row that does not exist');
 });
 
 test('validation asks for sketches, blurbs and solution reasons, and rejects predict.config', () => {

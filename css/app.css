@@ -778,8 +778,9 @@ body.frame-open { overflow: hidden; }
 
 /* the strip above the model: one row of compact cards, then "All scenarios" */
 .lab-nav { margin-top: 20px; }
-.lab-strip-row { display: flex; align-items: center; gap: 8px; }
-.lab-strip { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
+.lab-strip-row { display: flex; align-items: flex-start; gap: 8px; }
+/* wide screens: the row wraps so every card stays in sight; phones scroll it sideways (below) */
+.lab-strip { position: relative; flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; scrollbar-width: none; padding: 2px; margin: -2px; }
 .lab-strip::-webkit-scrollbar { display: none; }
 .lab-strip.fade-r { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); }
 .lab-strip.fade-l { -webkit-mask-image: linear-gradient(to right, transparent, #000 48px); mask-image: linear-gradient(to right, transparent, #000 48px); }
@@ -798,7 +799,7 @@ body.frame-open { overflow: hidden; }
 .lab-chip .mk svg { width: 11px; height: 11px; }
 .lab-chip .mk.s-right, .lab-chip .mk.s-passed { background: var(--k-good-f); color: var(--k-good-i); }
 .lab-chip .mk.s-missed { background: var(--k-bad-f); color: var(--k-bad-i); }
-.lab-chip .mk.s-seen { width: 11px; height: 11px; border: 1.5px solid var(--k-warn-s); }
+.lab-chip .mk.s-seen { width: 11px; height: 11px; border: 2px solid var(--k-warn-i); }
 .lab-strip-sep { flex: none; width: 1px; height: 20px; margin: 0 4px; background: var(--border-strong); }
 .lab-all-toggle { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border: 0; border-radius: 999px; background: none; font-size: var(--fs-ui); font-weight: 600; color: var(--link); cursor: pointer; }
 .lab-all-toggle:hover { background: var(--surface-2); }
@@ -1063,7 +1064,7 @@ body.frame-open { overflow: hidden; }
   .vz-box text { font-size: 15px; }
 
   .lab-strip-row { flex-direction: column; align-items: stretch; gap: 6px; }
-  .lab-strip { margin: -2px -16px; padding: 2px 16px; }
+  .lab-strip { flex-wrap: nowrap; overflow-x: auto; margin: -2px -16px; padding: 2px 16px; }
   .lab-all-toggle { align-self: flex-start; margin-left: -12px; }
   .lab-strip-more .lab-grid { padding: 14px; }
   .lab-main .sandbox { margin-left: -16px; margin-right: -16px; }

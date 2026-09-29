@@ -37,6 +37,13 @@
   const KEY = 'ddia-visual-guide-v1';
   let store = { seen: {}, quiz: {}, theme: null, labs: {} };
   try { store = Object.assign(store, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { /* private mode */ }
+  // 2026-09-29: two Isolation questions now ask about the setup on screen, so answers saved for the old
+  // questions no longer apply. Newer answers carry their question (see DDIA.labnav.saved).
+  if ((store.labsVersion || 1) < 2) {
+    const iso = store.labs && store.labs.isolation;
+    if (iso && iso.p) ['dirty-read', 'lost-update'].forEach((id) => { if (iso.p[id] && iso.p[id].q == null) delete iso.p[id]; });
+    store.labsVersion = 2;
+  }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* ignore */ } }
   function markSeen(chId, idx) {
     const list = store.seen[chId] || (store.seen[chId] = []);
@@ -799,7 +806,7 @@
     paintTopNav(r.labRoute ? 'lab' : r.home ? 'home' : null);
     if (r.labRoute) {
       const lab = r.lab && DDIA.lab.get(r.lab);
-      if (r.lab && !lab) { location.hash = '#/lab'; return; }
+      if (r.lab && !lab) { location.replace('#/lab'); return; }
       if (!lab) {
         main.appendChild(DDIA.lab.renderHub(labEnv));
         paintSidebar(null, null, {});
@@ -811,7 +818,7 @@
         document.title = `${lab.title} — DDIA visually`;
       } else {
         const tab = lab.presets.concat(lab.challenges).find((t) => t.id === r.tab);
-        if (!tab) { location.hash = `#/lab/${lab.id}`; return; }
+        if (!tab) { location.replace(`#/lab/${lab.id}`); return; }
         labScope = DDIA.viz.scope();
         main.appendChild(DDIA.lab.renderPage(lab, tab.id, r.query, labScope, labEnv));
         labActive = { id: lab.id, tab: tab.id };
@@ -1030,21 +1037,41 @@
           checkOverflow(page);
           if (page.querySelector('.demo-error')) push('lab crashed: ' + page.querySelector('.demo-error').textContent);
         }
-        for (const ch of l.challenges) {
+        for (const [ci, ch] of l.challenges.entries()) {
           where = `lab/${l.id}/${ch.id}/solution`;
           const sol = DDIA.lab.configFor(l, ch.config, ch.solution.config);
           const inp = ch.solution.input != null ? ch.solution.input : ch.input != null ? ch.input : l.defaultInput(sol);
           if (!DDIA.lab.checkChallenge(l, ch, sol, inp).ok) push('the challenge solution does not pass');
           const pr = labProgress(l.id);
-          if (pr.c[ch.id]) continue; // the control walk already passed it, so there's nothing to reveal
+          if (pr.c[ch.id]) continue; // the control walk already passed it
+          const test = () => {
+            const b = [...main.querySelectorAll('.lab-test .vz-btn')].find((x) => /Test my design/.test(x.textContent));
+            if (b) { b.focus(); b.click(); }
+            return b;
+          };
+          if (ci === 0) {
+            // found without help: open the solution's setup by URL, test it, and it counts as passed
+            const qs = Object.entries(ch.solution.config || {}).map(([k, val]) => `${k}=${encodeURIComponent(val)}`);
+            if (ch.solution.input != null) qs.push('run=' + encodeURIComponent(l.inputKey(ch.solution.input)));
+            location.hash = `#/lab/${l.id}/${ch.id}` + (qs.length ? '?' + qs.join('&') : '');
+            await wait(700);
+            test();
+            await wait(300);
+            if (!pr.c[ch.id] || pr.s[ch.id]) push('a pass without the solution should count as "Passed"');
+            if (!main.querySelector('.lab-strip [aria-current="page"] .mk.s-passed')) push('the strip does not mark the pass');
+            continue;
+          }
           location.hash = `#/lab/${l.id}/${ch.id}`;
           await wait(700);
-          const test = () => { const b = [...main.querySelectorAll('.lab-test .vz-btn')].find((x) => /Test my design/.test(x.textContent)); if (b) b.click(); };
-          test(); await wait(200); test(); await wait(200);
+          test(); await wait(200);
+          const focused = document.activeElement && document.activeElement.getAttribute('data-k');
+          if (focused !== 'test') push('keyboard focus leaves Test my design after a test');
+          test(); await wait(200);
           const show = [...main.querySelectorAll('.lab-test .lab-textbtn')].find((b) => /Show a solution/.test(b.textContent));
           if (!show) { push('"Show a solution" did not appear after two failed tests'); continue; }
           show.click();
           await wait(600);
+          if ([...main.querySelectorAll('.lab-test .lab-textbtn')].some((b) => /Show a solution/.test(b.textContent))) push('"Show a solution" stays while the solution is loaded');
           test();
           await wait(300);
           if (!main.querySelector('.lab-check .lab-reveal.k-good')) push('the shown solution does not pass in the page');

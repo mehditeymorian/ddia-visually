@@ -53,7 +53,7 @@ DDIA.lab({
   classify(stats, cfg) { return { kind: 'bad', label: 'stale reads' }; }, // one verdict per run: good | warn | bad
 
   view(el, v, api) { return { render(result, cfg, input, { animate, preview }) { /* → Promise */ } }; },
-  sketch(cfg) { return '<svg viewBox="0 0 240 84">…</svg>'; },  // the scenario card's drawing (see below)
+  sketch(cfg, input) { return '<svg viewBox="0 0 240 84">…</svg>'; },  // the scenario card's drawing (see below)
   presets: [/* … */],
   challenges: [/* … */],
 });
@@ -131,7 +131,7 @@ Step-based labs (like Isolation) can skip `DDIA.sim` and return a trace of rows 
 
 ## The scenario card sketch
 
-`sketch(cfg)` returns SVG markup for a tab's starting config. The overview and "All scenarios" draw one for every preset and challenge.
+`sketch(cfg, input)` returns SVG markup for a tab's opening setup: its config and its opening input (`tab.input`, or `defaultInput(cfg)`). The overview and "All scenarios" draw one for every preset and challenge. A lab whose input is a choice the learner makes, like the Isolation lab's step order, must draw that opening input, never a default that might be the answer.
 
 - Draw only the setup, never the outcome. A sketch must not call `run()` (the tests check this), because the card sits next to a question the learner hasn't answered yet.
 - Use a `viewBox` about 240 × 84 and the diagram tokens (`var(--k-good-s)` and so on), so both themes work.

@@ -7,9 +7,16 @@
 
   const isChallenge = (l, tab) => l.challenges.some((c) => c.id === tab.id);
 
+  /** The learner's saved prediction for a preset, or null when there is none or it answered a question
+   *  that has since been rewritten (predictions are stamped with the question they answered). */
+  function saved(tab, prog) {
+    const r = prog && prog.p && prog.p[tab.id];
+    if (r == null || !tab.predict) return null;
+    return r.q == null || r.q === tab.predict.q ? r : null;
+  }
+
   /** Where the learner stands on one preset or challenge. prog = store.labs[labId]; old saves lack f and s. */
   function status(l, tab, prog) {
-    const p = (prog && prog.p) || {};
     const c = (prog && prog.c) || {};
     const s = (prog && prog.s) || {};
     if (isChallenge(l, tab)) {
@@ -18,7 +25,7 @@
       return { kind: 'open', label: 'Not passed yet' };
     }
     if (!tab.predict) return { kind: 'sandbox', label: 'Sandbox' };
-    const r = p[tab.id];
+    const r = saved(tab, prog);
     if (r == null) return { kind: 'new', label: 'Not tried' };
     if (r.a === -1) return { kind: 'ran', label: 'Ran without predicting' };
     return r.ok ? { kind: 'right', label: 'Predicted right' } : { kind: 'missed', label: 'Missed' };
@@ -38,10 +45,15 @@
     return h('header', { class: 'lab-head' }, h('h1', null, l.title), meta, withTagline ? h('p', { class: 'lede' }, l.tagline) : null);
   }
 
-  // the lab's own drawing of how the tab starts; a broken sketch only loses the picture
+  /** The lab's drawing of how a tab starts: its config and its opening input (for example the step order). */
+  function sketchOf(l, tab) {
+    const cfg = DDIA.lab.configFor(l, tab.config);
+    return l.sketch(cfg, tab.input != null ? tab.input : l.defaultInput(cfg));
+  }
+  // a broken sketch only loses the picture
   function sketchEl(l, tab) {
     try {
-      return DDIA.viz.h('span', { class: 'lab-sketch', 'aria-hidden': 'true', html: l.sketch(DDIA.lab.configFor(l, tab.config)) });
+      return DDIA.viz.h('span', { class: 'lab-sketch', 'aria-hidden': 'true', html: sketchOf(l, tab) });
     } catch (err) {
       console.error(`Lab ${l.id}: the sketch for ${tab.id} failed:`, err);
       return null;
@@ -79,7 +91,8 @@
   }
 
   /** One row of compact cards above the model, plus "All scenarios" to open the grid in place.
-   *  Returns { el, paint }; call paint() after progress changes. */
+   *  Returns { el, paint, dispose }; call paint() after progress changes. On wide screens the row
+   *  wraps; on phones it scrolls sideways, with faded edges while there is more to see. */
   function strip(l, env, current) {
     const { h } = DDIA.viz;
     const row = h('nav', { class: 'lab-strip', 'aria-label': `${l.title}: scenarios and challenges` });
@@ -96,7 +109,7 @@
       const st = status(l, t, prog);
       const here = t.id === current;
       const mark = MARK[st.kind];
-      return h('a', { class: 'lab-chip' + (here ? ' current' : ''), href: `#/lab/${l.id}/${t.id}`, 'aria-current': here ? 'page' : null, 'data-nav': 'strip' },
+      return h('a', { class: 'lab-chip' + (here ? ' current' : ''), href: `#/lab/${l.id}/${t.id}`, 'aria-current': here ? 'page' : null, 'data-nav': 'strip', title: st.label },
         isChallenge(l, t) ? h('span', { class: 'ic', 'aria-hidden': 'true' }, DDIA.viz.icon('star')) : null,
         t.title,
         mark ? h('span', { class: 'mk s-' + st.kind, 'aria-hidden': 'true' }, mark === 'ring' ? null : DDIA.viz.icon(mark)) : null,
@@ -122,15 +135,16 @@
       row.classList.toggle('fade-r', row.scrollLeft < max - 2);
     };
     row.addEventListener('scroll', edges, { passive: true });
-    if (window.ResizeObserver) new ResizeObserver(edges).observe(row);
+    const ro = window.ResizeObserver ? new ResizeObserver(edges) : null;
+    if (ro) ro.observe(row);
     // bring the current card into view
     requestAnimationFrame(() => {
       const c = row.querySelector('.current');
       if (c && row.scrollWidth > row.clientWidth) row.scrollLeft = Math.max(0, c.offsetLeft - (row.clientWidth - c.offsetWidth) / 2);
       edges();
     });
-    return { el, paint };
+    return { el, paint, dispose: () => { if (ro) ro.disconnect(); } };
   }
 
-  DDIA.labnav = { status, header, grid, overview, strip };
+  DDIA.labnav = { status, saved, sketchOf, header, grid, overview, strip };
 })();
