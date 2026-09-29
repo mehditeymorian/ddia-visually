@@ -56,6 +56,8 @@
       const cur = labProgress(id);
       Object.assign(cur.p, (lp && lp.p) || {});
       Object.entries((lp && lp.c) || {}).forEach(([k, v]) => { if (v) cur.c[k] = v; });
+      Object.entries((lp && lp.f) || {}).forEach(([k, v]) => { cur.f[k] = Math.max(cur.f[k] || 0, Number(v) || 0); });
+      Object.entries((lp && lp.s) || {}).forEach(([k, v]) => { if (v) cur.s[k] = v; });
     });
     if ('theme' in fresh) store.theme = fresh.theme;
     if (fresh.last) store.last = fresh.last;
@@ -551,11 +553,11 @@
     (DDIA.labs || []).forEach((l, li) => {
       const add = (tab, kind, title, body, i) => searchIndex.push({
         kind, title, body, scope: l.title + ' playground', href: `#/lab/${l.id}` + (tab ? '/' + tab : ''), badge: 'lab', pc: 'var(--lab)', pcbg: 'var(--lab-bg)',
-        order: 100000 + li * 100 + i, where: tab ? `${kind === 'challenge' ? 'Challenge' : 'Preset'} · ${l.title}` : 'Playground lab',
+        order: 100000 + li * 100 + i, where: tab ? `${kind === 'challenge' ? 'Challenge' : 'Scenario'} · ${l.title}` : 'Playground lab',
       });
       add(null, 'lab', l.title, l.tagline, 0);
-      l.presets.forEach((t, i) => add(t.id, 'preset', t.title, [t.nudge, t.predict && t.predict.q].filter(Boolean).join(' · '), i + 1));
-      l.challenges.forEach((t, i) => add(t.id, 'challenge', t.title, t.goal, 50 + i));
+      l.presets.forEach((t, i) => add(t.id, 'preset', t.title, [t.blurb, t.nudge, t.predict && t.predict.q].filter(Boolean).join(' · '), i + 1));
+      l.challenges.forEach((t, i) => add(t.id, 'challenge', t.title, [t.blurb, t.goal].filter(Boolean).join(' · '), 50 + i));
     });
     searchIndex.forEach((e) => { e.nt = norm(e.title); e.nb = norm(e.body); e.nc = norm(e.scope); });
   }
@@ -721,6 +723,8 @@
     const p = all[id] || (all[id] = {});
     p.p = p.p || {};
     p.c = p.c || {};
+    p.f = p.f || {}; // failed challenge tests; two unlock "Show a solution"
+    p.s = p.s || {}; // challenges whose solution was shown
     return p;
   }
   // cards whose `lab` field points at this lab tab (the card is the single source of truth)
@@ -777,7 +781,8 @@
   }
   function placeFocus(kind) {
     const pick = kind === 'next' ? main.querySelector('[data-nav="next"]')
-        : kind === 'back' ? main.querySelector('[data-nav="back"]:not([disabled])') : null;
+        : kind === 'back' ? main.querySelector('[data-nav="back"]:not([disabled])')
+        : kind === 'strip' ? main.querySelector('.lab-strip [aria-current="page"]') : null;
     (pick || main).focus({ preventScroll: true });
   }
   function route() {
@@ -799,15 +804,22 @@
         main.appendChild(DDIA.lab.renderHub(labEnv));
         paintSidebar(null, null, {});
         document.title = 'Playground — DDIA visually';
+      } else if (!r.tab) {
+        main.appendChild(DDIA.labnav.overview(lab, labEnv));
+        labActive = { id: lab.id, tab: null };
+        paintSidebar(null, null, labActive);
+        document.title = `${lab.title} — DDIA visually`;
       } else {
-        const tab = lab.presets.concat(lab.challenges).find((t) => t.id === r.tab) || lab.presets[0];
+        const tab = lab.presets.concat(lab.challenges).find((t) => t.id === r.tab);
+        if (!tab) { location.hash = `#/lab/${lab.id}`; return; }
         labScope = DDIA.viz.scope();
         main.appendChild(DDIA.lab.renderPage(lab, tab.id, r.query, labScope, labEnv));
         labActive = { id: lab.id, tab: tab.id };
         paintSidebar(null, null, labActive);
         document.title = `${tab.title} · ${lab.title} — DDIA visually`;
       }
-      const sameLab = lastRoute && lastRoute.labRoute && lastRoute.lab === r.lab;
+      // moving between tabs of one lab keeps the scroll; opening the lab or its overview starts at the top
+      const sameLab = lastRoute && lastRoute.labRoute && lastRoute.lab === r.lab && lastRoute.tab && r.tab;
       if (!sameLab) window.scrollTo(0, 0);
       lastRoute = r;
       paintOverall();

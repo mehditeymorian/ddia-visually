@@ -602,7 +602,7 @@
           h('p', null, l.tagline),
           h('span', { class: 'lab-tile-ch' }, l.chapters.map((c) => `Chapter ${c}${env.chapterTitle(c) ? ': ' + env.chapterTitle(c) : ''}`).join(' · ')),
           h('span', { class: 'meta' },
-            h('span', null, `${l.presets.length} presets`, tried ? ` · ${tried} tried` : ''),
+            h('span', null, `${l.presets.length} scenarios`, tried ? ` · ${tried} tried` : ''),
             h('span', { class: done ? 'won' : '' }, `${done} of ${l.challenges.length} challenges passed`)))));
     });
     return grid;
