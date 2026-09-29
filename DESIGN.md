@@ -300,7 +300,7 @@ A near-colourless docs shell with a single blue voice, and a separate, evenly sa
 
 ### Primary
 - **Link Blue** (link; brightened to link-dark at night): links, the current item in navigation, the focus ring, text caret, progress fills, and the fill of the one primary action per view. Hover deepens to Link Blue Hover (link-hover / link-hover-dark).
-- **Blue Wash** (accent-bg / accent-bg-dark): the tint behind the current sidebar row, the current top link, the current lab tab, the selected search result, the note callout and the lab goal strip. It is how "you are here" reads without a filled block.
+- **Blue Wash** (accent-bg / accent-bg-dark): the tint behind the current sidebar row, the current top link, the current scenario in a lab's strip, the selected search result, the note callout and the lab goal strip. It is how "you are here" reads without a filled block.
 - **On Blue** (on-accent / on-accent-dark): text and icons on a filled blue control. White by day, near-black navy at night because the night blue is light.
 
 ### Neutral
@@ -346,7 +346,7 @@ Eight semantic kinds, each a trio of fill (-f), stroke (-s) and ink (-i), redefi
 
 ## Layout
 
-A docs shell: sticky 56px translucent top bar (88% page colour with backdrop blur, hairline below), a 272px sticky sidebar with its own scroll, and a main column padded 40px by 48px that centres a 900px page. Labs widen to 1180px with a two-column grid (model, then a 380px panel; 340px below 1180px) and a 28px gap; below 1040px the panel dissolves into the flow so Predict comes first, then the model, then the other sections.
+A docs shell: sticky 56px translucent top bar (88% page colour with backdrop blur, hairline below), a 272px sticky sidebar with its own scroll, and a main column padded 40px by 48px that centres a 900px page. Labs widen to 1180px with a two-column grid (model, then a 380px panel; 340px below 1180px) and a 28px gap; below 1040px the panel dissolves into the flow so Predict (or a challenge's goal and checklist) comes first, then the model, then the other sections.
 
 Spacing runs on a 4px base with 8, 12, 16, 20, 24 and 28px steps inside components and 48 to 64px between major blocks (pager, home sections, footer). Reading measure is capped at 54 to 76ch.
 
@@ -403,10 +403,10 @@ Rounded 16px tinted boxes with a 20px icon and no stripe. Neutral callouts use W
 - **Contents rows:** a 36px number badge (green fill when done), name, tagline and meta, separated by hairlines; hover fills Wash and turns the name blue.
 
 ### Lab Panel (signature)
-A sticky 16px-framed panel of sections separated by hairlines, each with a 14px bold title and a small Ink 3 note. Predict offers pill options that turn blue on hover and resolve into a good or bad reveal box. Setup shows at most a few knobs as segmented controls or pill slots with kind dots, and lists held values below a dashed hairline, each with a "Change" text button. Result opens with a verdict pill (kind fill, a 7px currentColor dot and a word) over label/value stat rows with tabular numbers. Test your design lists criteria with round check or cross marks plus a sentence of why. All runs is a 20-column grid of small squares (10 on phones) with a legend of counts, bad and warn at full strength, good faded.
+A sticky 16px-framed panel of sections separated by hairlines, each with a 14px bold title and a small Ink 3 note. Predict offers pill options that turn blue on hover and resolve into a good or bad reveal box. Setup shows at most a few knobs as segmented controls or pill slots with kind dots, and lists held values below a dashed hairline, each with a "Change" text button. Result opens with a verdict pill (kind fill, a 7px currentColor dot and a word) over label/value stat rows with tabular numbers. A challenge's panel reads Challenge n of m (the goal on Blue Wash, then a To pass checklist whose empty rings turn into round check or cross marks with a sentence of why and a "Show one" text button), then Your setup (knobs, a dashed-hairline "Fixed:" line, Test my design as the view's one filled blue, a "1 of 2 met" summary, Hint, and "Show a solution" after two failed tests). All runs is a 20-column grid of small squares (10 on phones) with a legend of counts, bad and warn at full strength, good faded.
 
-### Lab Tabs
-Rows of 34px pills with hairline edges and Ink 2 text, labelled by a small row name. The current tab sits on the Blue Wash in Link Blue, like every other "you are here" marker, so Run stays the only filled blue on the page; completed ones carry a green check or a small grey dot. On phones each row scrolls sideways.
+### Scenario Cards and Strip
+A lab opens on an overview of scenario cards, then challenge cards. Each card is a 16px hairline frame. At the top is a Wash band holding the lab's small setup sketch (diagram kinds, one mono label). Below it come a 16px semibold title (challenges lead with a star), a 14px Ink 2 blurb and a status pill with a 6px dot: good for "Predicted right" and "Passed", bad for "Missed", warn for "Solution seen", and Fill 2 with Ink 3 for everything else. Hover gives a blue edge and the Frame shadow, like lab tiles. Inside a scenario, the cards shrink to a strip of 34px hairline pills with a small drawn status mark. The current pill sits on Blue Wash in Link Blue, a hairline divider comes before the challenges, and "All scenarios" is a blue text pill that opens the same grid in place inside a Wash frame. The strip scrolls sideways and fades its edges when it overflows.
 
 ### Quiz Panel
 A Wash, 16px-framed panel: a row of 26 by 4px progress bars (blue current, green right, red wrong), a 20px semibold question, full-width 12px-rounded options with a letter badge. Answers resolve to good or bad fills with a filled letter badge and a tinted explanation. The score is an 800-weight 34px total coloured by outcome.
@@ -430,7 +430,7 @@ Nodes, links, packets, boxes, cells, tapes, logs, bars, tables, stats and steppe
 
 ### Don't:
 - **Don't** use Link Blue as decoration, a section colour or a highlight for non-interactive text.
-- **Don't** add metaphor chrome to the shell: no drawn map, no numbered chapter pips, no tile-grid navigation. Progress ticks and run grids that report the model's own data are fine.
+- **Don't** add metaphor chrome to the shell: no drawn map, no numbered chapter pips, no tile-grid navigation in the shell (a lab's scenario cards are content, not chrome). Progress ticks and run grids that report the model's own data are fine.
 - **Don't** put coloured side stripes on callouts, cards or list rows.
 - **Don't** add a second typeface, a webfont, or uppercase tracked labels above headings.
 - **Don't** use the diagram kinds to colour shell chrome (top bar, sidebar, headings, cards).

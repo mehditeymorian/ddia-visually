@@ -6,7 +6,9 @@ There's no build step. Use plain ES2020 in a classic script, don't use `import`/
 
 ## The idea in one paragraph
 
-A lab has a **pure model**: `run(cfg, input) → { trace, stats }`. The model has no DOM, no timers and no `Math.random`, so the same inputs always give the same result. The **view** only replays the trace as animation. Because the model is pure, the shell can run it hundreds of times in milliseconds. It does that to answer "predict first" questions ("in 37 of 100 runs"), to fill the "Try all runs" grid, and to grade challenges. The animation, the answers and the grades can never disagree.
+A lab has a **pure model**: `run(cfg, input) → { trace, stats }`. The model has no DOM, no timers and no `Math.random`, so the same inputs always give the same result. The **view** only replays the trace as animation. Because the model is pure, the shell can run it hundreds of times in milliseconds. It does that to answer "predict first" questions ("in 37 of 100 runs"), to fill the "All runs" grid, and to grade challenges. The animation, the answers and the grades can never disagree.
+
+Learners see a lab's presets as **scenarios**. `#/lab/<id>` opens the lab's **overview**: a grid of scenario cards, then challenge cards. Each card shows the lab's `sketch` of the starting setup, the title, the `blurb` and the learner's status. Picking a card opens `#/lab/<id>/<tab>`. There, a strip of compact cards sits above the model, and "All scenarios" opens the grid in place.
 
 ## Bounding rules (enforced)
 
@@ -20,7 +22,9 @@ Labs must never overwhelm. `DDIA.lab.validate()` checks these rules when the lab
 | Builder slots | ≤ 5 slots, ≤ 4 states each |
 | Timeline | ≤ 2 transactions × ≤ 5 steps |
 | Nudge | ≤ 15 words |
-| Presets | ≥ 1; the lab always opens on one, never on a blank setup |
+| Blurb (every preset and challenge) | ≤ 12 words |
+| `solution.why` (every challenge) | ≤ 20 words |
+| Presets | ≥ 1; the lab opens on its overview of ready scenarios, never on a blank setup |
 
 ## Definition
 
@@ -49,6 +53,7 @@ DDIA.lab({
   classify(stats, cfg) { return { kind: 'bad', label: 'stale reads' }; }, // one verdict per run: good | warn | bad
 
   view(el, v, api) { return { render(result, cfg, input, { animate, preview }) { /* → Promise */ } }; },
+  sketch(cfg) { return '<svg viewBox="0 0 240 84">…</svg>'; },  // the scenario card's drawing (see below)
   presets: [/* … */],
   challenges: [/* … */],
 });
@@ -59,21 +64,25 @@ DDIA.lab({
 ```js
 {
   id: 'stale-read', title: 'Lagging replica',
+  blurb: 'One replica applies writes late. Will reads be stale?', // the card's one line
   config: { n: 3, w: 1, r: 1, slots: ['up', 'up', 'lag'] },
   knobs: ['w', 'r', 'net'],                        // ≤ 3 shown; others held, one "Change" away
   input: 46,                                       // optional: open on a run that shows the effect
   nudge: 'Raise w or r until the stale reads stop.',
-  predict: { q: 'w = 1, r = 1… Will reads be stale?', metric: 'stale', config: { /* optional overrides to ask about */ } },
+  predict: { q: 'w = 1, r = 1… Will reads be stale?', metric: 'stale' },
 }
 ```
 
-The predict answer is **computed**. The shell runs `samples()` with the preset config (plus `predict.config`) and counts the runs where `stats[metric] > 0`: never, sometimes or every run. Never hard-code an answer. After the reveal, `predict.config` is applied to the knobs, so the learner sees exactly what was asked.
+The predict answer is **computed**. The shell runs `samples()` with the preset's config and counts the runs where `stats[metric] > 0`: never, sometimes or every run. Never hard-code an answer.
+
+A question is always about the setup on screen, which is the preset's own `config`. The validator rejects `predict.config`. To ask about a fix, either ask about the break and let the nudge point to the fix ("break it, then fix it"), or open the preset on the setup you want to ask about. The nudge stays hidden until the learner answers, because it often names the answer.
 
 ### Challenges
 
 ```js
 {
   id: 'missed-writes', title: 'Missed writes, zero stale',
+  blurb: 'A replica misses writes. Serve zero stale reads.',
   goal: 'Replica 3 misses every write, then rejoins. Serve no stale reads and fail nothing.',
   config: { n: 3, w: 1, r: 1, slots: ['up', 'up', 'rec'] }, knobs: ['w', 'r', 'repair'], // everything else is fixed
   input: [1, 1, 2, 2],                                   // optional start input
@@ -84,11 +93,15 @@ The predict answer is **computed**. The shell runs `samples()` with the preset c
     { label: 'No weaker level works', test(cfg, ctx) { /* ctx.runAll(cfg2) */ return { ok, text }; } },
   ],
   hint: 'Read quorums must overlap write quorums…',
-  solution: { config: { w: 2, r: 2 }, input: /* optional */ },   // used by the tests, never shown
+  solution: { config: { w: 2, r: 2 }, input: /* optional */, why: 'w + r > n, so every read quorum overlaps the latest write quorum.' },
 }
 ```
 
-The tests require every challenge to **fail at its start config** and **pass with its solution**. Grade over enough samples that a design which is only *usually* right fails. Rare anomalies are the point: "After reply" read repair goes back in time in about 7 of 1000 runs, so the Quorum challenges use `runs: 1000`, and "Show a failing run" lets the learner watch the rare case.
+The challenge panel reads in the order the learner uses it. First comes **Challenge n of m** with the goal and a **To pass** checklist, one row per criterion. Rows start as empty rings, and after **Test my design** each shows ✓ or ✕ with the checker's text. A failed row with a failing sample gets **Show one**, which loads that run onto the model. Next comes **Your setup**: the editable knobs, a "Fixed:" line for everything else, Test, a "1 of 2 met" summary and the hint. On phones the checklist section sits above the model.
+
+After **two failed tests**, **Show a solution** appears. It loads `solution.config` (and `solution.input`), shows `solution.why` and plays the run. From then on the challenge counts as "Solution seen", not "Passed". Only a pass found without the solution counts as "Passed". Progress keeps `f[chId]` (failed tests) and `s[chId]` (solution shown) next to `p` and `c`.
+
+The tests require every challenge to **fail at its start config** and **pass with its solution**. Grade over enough samples that a design which is only *usually* right fails. Rare anomalies are the point: "After reply" read repair goes back in time in about 7 of 1000 runs, so the Quorum challenges use `runs: 1000`, and "Show one" beside a failed criterion lets the learner watch the rare case.
 
 ## The model
 
@@ -116,6 +129,14 @@ run: (cfg, seed) => DDIA.sim.run(model, cfg, seed),
 
 Step-based labs (like Isolation) can skip `DDIA.sim` and return a trace of rows directly.
 
+## The scenario card sketch
+
+`sketch(cfg)` returns SVG markup for a tab's starting config. The overview and "All scenarios" draw one for every preset and challenge.
+
+- Draw only the setup, never the outcome. A sketch must not call `run()` (the tests check this), because the card sits next to a question the learner hasn't answered yet.
+- Use a `viewBox` about 240 × 84 and the diagram tokens (`var(--k-good-s)` and so on), so both themes work.
+- Include at most one short text label, at `font-size` ≥ 14. Encode everything else as shapes: Quorum draws replica states and the network; Isolation draws step kinds in the opening order.
+
 ## The view
 
 - `render()` must draw everything for the given result from scratch. With `animate` it replays the trace (use `v.sleep(api.pace(ms))`, so the 1×/3× switch works); without it, it shows the end state at once. With `preview` it shows only the setup, with no outcome, because the learner hasn't predicted yet.
@@ -135,8 +156,8 @@ The card shows **"Try it yourself in the Isolation lab"**. The preset lists ever
 ## Checklist
 
 ```bash
-node scripts/labtest.mjs          # model, bounding, predicts, challenges, card links
-node scripts/selftest.mjs labs    # headless Chrome: every tab, every control, overflow, errors
+node scripts/labtest.mjs          # model, bounding, predicts, challenges, sketches, card statuses, card links
+node scripts/selftest.mjs labs    # headless Chrome: overview, strip, every tab and control, solution reveal, overflow, errors
 ```
 
 Add Node tests for your model's key claims, such as "w + r > n never serves stale reads" or "SSI fixes write skew in every order". The UI can only be as right as the model.
