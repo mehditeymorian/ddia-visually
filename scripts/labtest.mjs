@@ -12,7 +12,7 @@ globalThis.window = globalThis;
 const loadErrors = [];
 const origError = console.error;
 console.error = (...a) => { loadErrors.push(a.map(String).join(' ')); };
-for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js', 'js/labs/partition.js', 'js/labs/leases.js', 'js/labs/clocks.js', 'js/labs/storage.js']) {
+for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js', 'js/labs/partition.js', 'js/labs/leases.js', 'js/labs/clocks.js', 'js/labs/storage.js', 'js/labs/streams.js']) {
   try { vm.runInThisContext(readFileSync(join(root, f), 'utf8'), { filename: f }); } catch (e) { loadErrors.push(`${f}: ${e.message}`); }
 }
 console.error = origError;
@@ -523,6 +523,43 @@ test('storage: compaction and Bloom filters are LSM-tree parts only', () => {
   assert.equal(cfg.bloom, 'off');
 });
 
+/* ---------- streams lab ---------- */
+const SM = () => DDIA.lab.get('streams');
+const smRuns = (cfg) => DDIA.lab.runAll(SM(), DDIA.lab.configFor(SM(), cfg));
+const smCount = (cfg, metric) => smRuns(cfg).filter((r) => r.stats[metric] > 0).length;
+
+test('streams: the same seed gives the same trace', () => {
+  const cfg = DDIA.lab.configFor(SM(), { delays: 'offline', time: 'event', wait: 30, late: 'correct' });
+  assert.deepEqual(SM().run(cfg, 3), SM().run(cfg, 3));
+});
+
+test('streams: counting by arrival time puts stragglers in the wrong minute', () => {
+  assert.equal(smCount({ delays: 'some', time: 'processing' }, 'wrong'), 100);
+  const tiny = smCount({ delays: 'none', time: 'processing' }, 'wrong');
+  assert.ok(tiny > 0 && tiny < 100, `even a second of delay moves boundary events (${tiny})`);
+});
+
+test('streams: a window that waits longer than the slowest straggler is always right', () => {
+  assert.equal(smCount({ delays: 'some', time: 'event', wait: 120, late: 'drop' }, 'wrong'), 0);
+  assert.equal(smCount({ delays: 'some', time: 'event', wait: 30, late: 'drop' }, 'wrong'), 100, '30 s is shorter than a 90 s straggler');
+  assert.equal(smCount({ delays: 'offline', time: 'event', wait: 120, late: 'drop' }, 'wrong'), 100, 'no wait catches a phone that was offline');
+});
+
+test('streams: corrections make every count right in the end, whatever the delays', () => {
+  ['none', 'some', 'offline'].forEach((delays) => [0, 30, 120].forEach((wait) => smRuns({ delays, time: 'event', wait, late: 'correct' }).forEach((r) => {
+    assert.equal(r.stats.wrong, 0, `${delays}, wait ${wait}`);
+    assert.equal(r.stats.dropped, 0);
+  })));
+});
+
+test('streams: every event is counted once, in the minute it happened', () => {
+  smRuns({ delays: 'offline', time: 'event', wait: 0, late: 'correct' }).forEach((r) => {
+    const done = SM().run(DDIA.lab.configFor(SM(), { delays: 'offline', time: 'event', wait: 0, late: 'correct' }), r.input).trace.pop();
+    assert.equal(done.shown.reduce((a, b) => a + b, 0), DDIA.labs.streamsModel.EVENTS);
+    assert.deepEqual(done.shown, done.truth);
+  });
+});
+
 /* ---------- presets, predicts, challenges, card links ---------- */
 test('every lab passes validation', () => {
   assert.ok(DDIA.labs.length >= 2);
@@ -556,9 +593,9 @@ test('every card lab link points at a real lab and preset', () => {
   const links = [];
   const saved = DDIA.chapter;
   DDIA.chapter = (def) => def.cards.forEach((c, i) => { if (c.lab) links.push({ where: `ch${def.id}/${i + 1}`, lab: c.lab }); });
-  for (const n of ['03', '05', '06', '07', '08', '09']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
+  for (const n of ['03', '05', '06', '07', '08', '09', '11']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
   DDIA.chapter = saved;
-  assert.ok(links.length >= 32, `expected at least 32 card links, found ${links.length}`);
+  assert.ok(links.length >= 33, `expected at least 33 card links, found ${links.length}`);
   links.forEach(({ where, lab }) => {
     const l = DDIA.lab.get(lab.id);
     assert.ok(l, `${where}: no lab ${lab.id}`);
