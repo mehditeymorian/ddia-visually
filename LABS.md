@@ -127,7 +127,7 @@ run: (cfg, seed) => DDIA.sim.run(model, cfg, seed),
 - `net.send()` emits `send` with an `arrive` time, so views can animate the flight. A message to a node that is down on arrival emits `drop`.
 - The run stops when the event queue is empty. More than 50,000 events throws "simulation ran away".
 
-Step-based labs (like Isolation) can skip `DDIA.sim` and return a trace of rows directly.
+Step-based labs (like Isolation and Partitioning) can skip `DDIA.sim` and return a trace of rows directly. When a model has tunable constants (write counts, thresholds), prototype it over every knob combination and every sample first, so predictions and grades come out true rather than lucky; Partitioning's constants were set that way.
 
 ## The scenario card sketch
 

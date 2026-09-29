@@ -12,7 +12,7 @@ globalThis.window = globalThis;
 const loadErrors = [];
 const origError = console.error;
 console.error = (...a) => { loadErrors.push(a.map(String).join(' ')); };
-for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js']) {
+for (const f of ['js/sim.js', 'js/lab.js', 'js/lab-nav.js', 'js/labs/quorum.js', 'js/labs/isolation.js', 'js/labs/partition.js']) {
   try { vm.runInThisContext(readFileSync(join(root, f), 'utf8'), { filename: f }); } catch (e) { loadErrors.push(`${f}: ${e.message}`); }
 }
 console.error = origError;
@@ -306,6 +306,91 @@ test('quorum: challenges reject designs that only pass by luck', () => {
   assert.equal(check('two-rejoin', { w: 3, r: 3 }), true);
 });
 
+/* ---------- partitioning lab ---------- */
+const PT = () => DDIA.lab.get('partition');
+const ptRuns = (cfg) => DDIA.lab.runAll(PT(), DDIA.lab.configFor(PT(), cfg));
+const ptCount = (cfg, metric) => ptRuns(cfg).filter((r) => r.stats[metric] > 0).length;
+
+test('partition: the same seed gives the same trace', () => {
+  const cfg = DDIA.lab.configFor(PT(), { load: 'celebrity', place: 'hash', grow: 'add', salt: 'suffix' });
+  assert.deepEqual(PT().run(cfg, 5), PT().run(cfg, 5));
+  assert.notDeepEqual(PT().run(cfg, 5).trace, PT().run(cfg, 6).trace);
+});
+
+test('partition: hash mod N moves most keys when a node joins; fixed partitions do not', () => {
+  assert.equal(ptCount({ load: 'users', place: 'mod', nodes: 4, grow: 'add' }, 'massMove'), 100);
+  assert.equal(ptCount({ load: 'users', place: 'hash', nodes: 4, grow: 'add' }, 'massMove'), 0);
+  ptRuns({ load: 'users', place: 'hash', nodes: 4, grow: 'add' }).forEach((r) => assert.ok(r.stats.moved < 50, `moved ${r.stats.moved}%`));
+});
+
+test('partition: time as the first key part makes a hot spot; a compound key does not', () => {
+  assert.equal(ptCount({ load: 'sensors', place: 'range' }, 'hot'), 100);
+  assert.equal(ptCount({ load: 'sensors', place: 'compound' }, 'hot'), 0);
+  assert.equal(ptCount({ load: 'sensors', place: 'compound' }, 'scatter'), 0);
+  const read = PT().run(DDIA.lab.configFor(PT(), { load: 'sensors', place: 'compound' }), 1).trace.find((e) => e.type === 'read');
+  assert.equal(read.nodes.length, 1, 'one sensor lives on one node');
+});
+
+test('partition: uniform users never look hot', () => {
+  ['range', 'hash', 'mod', 'compound'].forEach((place) => [3, 4].forEach((nodes) => {
+    assert.equal(ptCount({ load: 'users', place, nodes }, 'hot'), 0, `${place}, N = ${nodes}`);
+  }));
+});
+
+test('partition: a celebrity stays hot until a suffix and hashing spread it', () => {
+  assert.equal(ptCount({ load: 'celebrity', place: 'hash', nodes: 4 }, 'hot'), 100);
+  assert.equal(ptCount({ load: 'celebrity', place: 'hash', nodes: 4, salt: 'suffix' }, 'hot'), 0);
+  assert.equal(ptCount({ load: 'celebrity', place: 'range', nodes: 4, salt: 'suffix' }, 'hot'), 100, 'suffixed keys still sort together');
+});
+
+test('partition: a key-range read asks at most two nodes; hashing asks all', () => {
+  ptRuns({ load: 'users', place: 'range', nodes: 4 }).forEach((r) => assert.equal(r.stats.scatter, 0));
+  const read = PT().run(DDIA.lab.configFor(PT(), { load: 'users', place: 'range', nodes: 4 }), 3).trace.find((e) => e.type === 'read');
+  assert.ok(read.nodes.length <= 2);
+  assert.equal(ptCount({ load: 'users', place: 'hash', nodes: 4 }, 'scatter'), 100);
+});
+
+test('partition: a join moves exactly the keys of the partitions the new node takes', () => {
+  const cfg = DDIA.lab.configFor(PT(), { load: 'users', place: 'hash', nodes: 4, grow: 'add' });
+  const { trace, stats } = PT().run(cfg, 9);
+  const join = trace.find((e) => e.type === 'join');
+  const counts = [0, 0, 0, 0, 0];
+  join.owner.forEach((o) => counts[o]++);
+  assert.ok(Math.max(...counts) - Math.min(...counts) <= 1, `partitions stay balanced: ${counts}`);
+  const taken = new Set(join.took.map((t) => t.part));
+  const keys = new Map();
+  trace.filter((e) => e.type === 'write' && e.i < DDIA.labs.partitionModel.HALF).forEach((e) => keys.set(e.key, e.part));
+  const expected = [...keys.values()].filter((part) => taken.has(part)).length;
+  assert.equal(stats.moved, Math.round((expected / keys.size) * 100));
+});
+
+test('partition: keys moved counts the celebrity key once, not once per write', () => {
+  const cfg = DDIA.lab.configFor(PT(), { load: 'celebrity', place: 'hash', nodes: 4, grow: 'add' });
+  PT().samples(cfg).forEach((seed) => assert.ok(PT().run(cfg, seed).stats.moved < 50));
+});
+
+test('partition: a bar that crosses the hot line mid-phase always ends hot', () => {
+  const { HALF, WRITES, HOT } = DDIA.labs.partitionModel;
+  const cfgs = PT().presets.concat(PT().challenges).flatMap((t) => [t.config, Object.assign({}, t.config, (t.solution || {}).config)]);
+  cfgs.forEach((c) => {
+    const cfg = DDIA.lab.configFor(PT(), c);
+    const size = cfg.grow === 'add' ? HALF : WRITES;
+    PT().samples(cfg).slice(0, 30).forEach((seed) => {
+      const { trace } = PT().run(cfg, seed);
+      let n = cfg.nodes;
+      let load = Array(n).fill(0);
+      let crossed = false;
+      const verdicts = [];
+      trace.forEach((e) => {
+        if (e.type === 'join') { verdicts.push([crossed, e.before.hot]); n++; load = Array(n).fill(0); crossed = false; }
+        if (e.type === 'write') { load[e.node]++; if (load[e.node] / size > HOT / n) crossed = true; }
+        if (e.type === 'done') verdicts.push([crossed, e.last.hot]);
+      });
+      verdicts.forEach(([c, hot]) => assert.equal(c, !!hot, `${JSON.stringify(c)} seed ${seed}`));
+    });
+  });
+});
+
 /* ---------- presets, predicts, challenges, card links ---------- */
 test('every lab passes validation', () => {
   assert.ok(DDIA.labs.length >= 2);
@@ -339,9 +424,9 @@ test('every card lab link points at a real lab and preset', () => {
   const links = [];
   const saved = DDIA.chapter;
   DDIA.chapter = (def) => def.cards.forEach((c, i) => { if (c.lab) links.push({ where: `ch${def.id}/${i + 1}`, lab: c.lab }); });
-  for (const n of ['05', '07', '09']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
+  for (const n of ['05', '06', '07', '09']) vm.runInThisContext(readFileSync(join(root, `js/chapters/ch${n}.js`), 'utf8'));
   DDIA.chapter = saved;
-  assert.ok(links.length >= 13, `expected at least 13 card links, found ${links.length}`);
+  assert.ok(links.length >= 18, `expected at least 18 card links, found ${links.length}`);
   links.forEach(({ where, lab }) => {
     const l = DDIA.lab.get(lab.id);
     assert.ok(l, `${where}: no lab ${lab.id}`);
